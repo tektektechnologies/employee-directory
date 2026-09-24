@@ -41,7 +41,7 @@ Access rules:
 - There is no delete policy. A profile is deleted when its auth user is
   deleted.
 
-The app uses only the public anon key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`). Never
+The app uses only the publishable key (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). Never
 put the service-role key in this app or in any `NEXT_PUBLIC_` variable,
 because it bypasses Row Level Security.
 

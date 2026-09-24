@@ -7,8 +7,9 @@ see which team they belong to, and keep their own profile up to date. It is
 built with Next.js (App Router), TypeScript, and Tailwind CSS, and will use
 Supabase for authentication and data.
 
-Current status: landing page only. Sign-in and registration links point to
-routes that are not implemented yet.
+Current status: registration, email confirmation, sign-in, and sign-out work.
+The directory, person, and profile-edit pages are protected, but for now they
+only show placeholders.
 
 ## Local setup
 
@@ -21,29 +22,32 @@ Requirements: Node.js 20.9 or newer and npm.
    ```
 
 2. Create your local environment file and fill in the values from your
-   Supabase project (Project Settings → API):
+   Supabase project (Project Settings → API Keys):
 
    ```bash
    cp .env.example .env.local
    ```
 
-   | Variable                        | Purpose                        |
-   | ------------------------------- | ------------------------------ |
-   | `NEXT_PUBLIC_SUPABASE_URL`      | Your Supabase project URL      |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase public anon key  |
+   | Variable                               | Purpose                                              |
+   | -------------------------------------- | ---------------------------------------------------- |
+   | `NEXT_PUBLIC_SUPABASE_URL`             | Your Supabase project URL                            |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Your publishable key (`sb_publishable_...`), which is safe to expose to browsers |
 
    `.env.local` and other `.env*` files are git-ignored; only `.env.example`
    is committed. Never commit real keys.
 
-3. Start the development server and open http://localhost:3000:
+3. Apply the database migrations in `supabase/migrations/` to your Supabase
+   project. See [docs/database.md](docs/database.md) for step-by-step
+   instructions and a policy verification checklist.
+
+4. Configure Supabase Auth URLs for localhost. See
+   [docs/auth.md](docs/auth.md#supabase-settings-for-localhost).
+
+5. Start the development server and open http://localhost:3000:
 
    ```bash
    npm run dev
    ```
-
-4. Apply the database migrations in `supabase/migrations/` to your Supabase
-   project. See [docs/database.md](docs/database.md) for step-by-step
-   instructions and a policy verification checklist.
 
 ## Scripts
 
@@ -56,11 +60,19 @@ Requirements: Node.js 20.9 or newer and npm.
 
 ```
 app/
-  layout.tsx    Root layout and metadata
-  page.tsx      Landing page
-  globals.css   Tailwind entry point
+  layout.tsx          Root layout and metadata
+  page.tsx            Landing page
+  (auth)/             Sign-in and registration pages and server actions
+  (protected)/        Signed-in pages: /directory, /people/[id], /profile/edit
+  auth/confirm/       Email confirmation link handler
+components/           Shared form components
+lib/
+  auth/               Verified-user checks and safe redirect helpers
+  supabase/           Server, browser, and proxy Supabase clients
+proxy.ts              Session refresh and route protection on every request
 docs/
-  database.md   Schema, access rules, and how to apply migrations
+  auth.md             Auth design and Supabase URL settings
+  database.md         Schema, access rules, and how to apply migrations
 supabase/
-  migrations/   Versioned SQL migrations, applied in filename order
+  migrations/         Versioned SQL migrations, applied in filename order
 ```
