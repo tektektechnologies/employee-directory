@@ -46,13 +46,13 @@ export default async function DirectoryPage({ searchParams }: PageProps<"/direct
       </p>
 
       <FilterForm
-        key={filterKey}
+        key={`form-${filterKey}`}
         filters={filters}
         departments={departments}
         departmentsFailed={departmentsFailed}
       />
 
-      <Suspense key={filterKey} fallback={<ResultsSkeleton />}>
+      <Suspense key={`results-${filterKey}`} fallback={<ResultsSkeleton />}>
         <Results supabase={supabase} filters={filters} userId={user.id} />
       </Suspense>
     </>
