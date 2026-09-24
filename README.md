@@ -9,8 +9,9 @@ Supabase for authentication and data.
 
 Current status: registration, email confirmation, sign-in, and sign-out work.
 New users set up their profile before they reach the directory, and
-`/profile/edit` handles later changes. The directory list and person pages are
-protected but still show placeholders.
+`/profile/edit` handles later changes. The directory lists colleagues as cards,
+with name search and a department filter. Person pages are protected but still
+show placeholders.
 
 ## Local setup
 

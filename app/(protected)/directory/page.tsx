@@ -1,10 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { FormStatusMessage } from "@/components/form-status-message";
 import { requireVerifiedUser } from "@/lib/auth/verified-user";
+import { fetchDirectoryDepartments, parseDirectoryFilters } from "@/lib/profiles/directory";
+import { DirectoryFiltersForm } from "./directory-filters-form";
+import { DirectoryResults } from "./directory-results";
+import { DirectoryResultsSkeleton } from "./directory-results-skeleton";
 
 export const metadata: Metadata = { title: "Directory · Mathematics, Inc." };
+
+function buildDirectoryHref(nameQuery: string, department: string) {
+  const directorySearchParams = new URLSearchParams();
+  if (nameQuery) directorySearchParams.set("q", nameQuery);
+  if (department) directorySearchParams.set("department", department);
+  const queryString = directorySearchParams.toString();
+  return queryString ? `/directory?${queryString}` : "/directory";
+}
 
 export default async function DirectoryPage({ searchParams }: PageProps<"/directory">) {
   const { supabase, user } = await requireVerifiedUser("/directory");
@@ -21,11 +34,15 @@ export default async function DirectoryPage({ searchParams }: PageProps<"/direct
     redirect("/profile/edit");
   }
 
-  const { welcome } = await searchParams;
+  const resolvedSearchParams = await searchParams;
+  const filters = parseDirectoryFilters(resolvedSearchParams);
+  const { departments, loadFailed: departmentsLoadFailed } =
+    await fetchDirectoryDepartments(supabase);
+  const isWelcome = resolvedSearchParams.welcome === "1";
 
   return (
     <>
-      {welcome === "1" && (
+      {isWelcome && (
         <div className="mb-8 flex flex-col gap-3">
           <FormStatusMessage
             tone="success"
@@ -49,8 +66,27 @@ export default async function DirectoryPage({ searchParams }: PageProps<"/direct
           </p>
         </div>
       )}
+
       <h1 className="text-2xl font-semibold tracking-tight">Directory</h1>
-      <p className="mt-2 text-stone-600">The employee list will appear here.</p>
+      <p className="mt-2 mb-6 text-stone-600">Find colleagues by name or department.</p>
+
+      <DirectoryFiltersForm
+        key={`${filters.nameQuery}|${filters.department}`}
+        filters={filters}
+        departments={departments}
+        departmentsLoadFailed={departmentsLoadFailed}
+      />
+
+      <Suspense
+        key={`${filters.nameQuery}|${filters.department}`}
+        fallback={<DirectoryResultsSkeleton />}
+      >
+        <DirectoryResults
+          supabase={supabase}
+          filters={filters}
+          retryHref={buildDirectoryHref(filters.nameQuery, filters.department)}
+        />
+      </Suspense>
     </>
   );
 }

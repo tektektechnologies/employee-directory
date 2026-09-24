@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getSupabaseConfig } from "./config";
 
+export type SupabaseServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
 export async function createSupabaseServerClient() {
   const { supabaseUrl, supabasePublishableKey } = getSupabaseConfig();
   const cookieStore = await cookies();
