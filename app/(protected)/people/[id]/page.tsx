@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { primaryButton, textLink } from "@/components/styles";
 import { requireUser } from "@/lib/auth/user";
 import { PROFILE_COLUMNS, type ProfileRow } from "@/lib/profiles/fields";
-import { toContactLink, toHttpsUrl } from "@/lib/profiles/links";
+import { toContactLink } from "@/lib/profiles/links";
+import { getPhotoUrl } from "@/lib/profiles/photos";
 import { ProfilePhoto } from "./profile-photo";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -29,6 +30,7 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
     .eq("id", id)
     .maybeSingle<ProfileRow & { id: string }>();
   if (error) {
+    console.error("Loading profile failed:", error.message);
     throw new Error("Couldn't load this profile.");
   }
   if (!profile) {
@@ -36,7 +38,7 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
   }
 
   const isOwn = profile.id === user.id;
-  const photoUrl = toHttpsUrl(profile.photo_url);
+  const photoUrl = await getPhotoUrl(supabase, profile.photo_path);
   const contact = toContactLink(profile.contact_url);
   const roleLine = [profile.job_title, profile.department].filter(Boolean).join(" · ");
 

@@ -37,6 +37,7 @@ describe("getProfiles", () => {
     department: "Algebra",
     location: "London",
     bio: "word ".repeat(60),
+    photo_path: null,
   };
 
   async function search(filters: Filters) {

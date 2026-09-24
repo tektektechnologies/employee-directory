@@ -6,7 +6,9 @@ a migration after it has been applied; add a new one instead.
 
 ## `profiles` table
 
-Created by `supabase/migrations/20260924131500_create_profiles.sql`.
+Created by `supabase/migrations/20260924131500_create_profiles.sql`, which
+also creates the `avatars` Storage bucket for profile photos and its access
+policies.
 
 | Column        | Type          | Notes                                                    |
 | ------------- | ------------- | -------------------------------------------------------- |
@@ -17,7 +19,7 @@ Created by `supabase/migrations/20260924131500_create_profiles.sql`.
 | `bio`         | `text`        | Optional, up to 1000 characters                          |
 | `location`    | `text`        | Optional, up to 100 characters                           |
 | `interests`   | `text[]`      | Defaults to empty; at most 20 entries                    |
-| `photo_url`   | `text`        | Optional; must start with `https://`                     |
+| `photo_path`  | `text`        | Optional; the uploaded photo's path in the `avatars` bucket, always inside the owner's own folder (`<id>/<file id>.jpg\|png\|webp`) |
 | `contact_url` | `text`        | Optional; must start with `https://` or `mailto:`        |
 | `created_at`  | `timestamptz` | Set on insert                                            |
 | `updated_at`  | `timestamptz` | Set on insert and by trigger on every update             |
@@ -41,6 +43,18 @@ Access rules:
 - There is no delete policy. A profile is deleted when its auth user is
   deleted.
 
+Profile photos:
+
+- Photos are stored in the private `avatars` Storage bucket. Storage itself
+  rejects files over 2 MB and anything other than JPG, PNG, or WebP.
+- Each user can upload, replace, and delete files only in a folder named
+  after their own user id. Any signed-in user can view photos. Anonymous
+  visitors can't.
+- Pages show photos through signed URLs that expire after an hour.
+- When a user saves a new photo or removes theirs, the app deletes the old
+  file. A photo that was uploaded but never saved can be left behind, and it
+  is harmless.
+
 The app uses only the publishable key (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). Never
 put the service-role key in this app or in any `NEXT_PUBLIC_` variable,
 because it bypasses Row Level Security.
@@ -48,9 +62,11 @@ because it bypasses Row Level Security.
 ## Applying the migration
 
 The migration creates everything from scratch. It fails with
-`relation "profiles" already exists` if the table is already there, and in
-that case nothing is changed. If your project already has a `profiles` table,
-complete [Replacing an existing profiles table](#replacing-an-existing-profiles-table)
+`relation "profiles" already exists` if the table is already there, or with a
+duplicate-key or "policy already exists" error if the `avatars` bucket or its
+policies are. In either case nothing is changed. If your project already has
+these, complete
+[Replacing an existing profiles table](#replacing-an-existing-profiles-table)
 first.
 
 ### Option A: Supabase dashboard
@@ -62,6 +78,7 @@ first.
    **Run**. You should see "Success. No rows returned."
 3. Open **Table Editor** → `profiles` and confirm the columns and the
    **RLS enabled** badge.
+4. Open **Storage** and confirm the private `avatars` bucket exists.
 
 The dashboard doesn't record which migrations were applied. If you later
 switch to the CLI, mark this one as applied, so the CLI doesn't re-run it:
@@ -137,21 +154,36 @@ is deleted until you choose to delete it.
    This also removes the old table's policies and triggers. The migration
    recreates them.
 
+   If the `avatars` bucket already exists from an earlier setup, also remove
+   its storage policies. You can keep the bucket and its files: delete the
+   bucket's `insert into storage.buckets ...` statement from your copy of the
+   migration before running it.
+
+   ```sql
+   drop policy if exists "Authenticated users can view avatars" on storage.objects;
+   drop policy if exists "Users can upload their own avatars" on storage.objects;
+   drop policy if exists "Users can replace their own avatars" on storage.objects;
+   drop policy if exists "Users can delete their own avatars" on storage.objects;
+   ```
+
 5. **Apply the migration** using option A or B above.
 
 6. **Restore rows that have a matching auth user.** Adjust the column list to
    match the columns your old table actually had.
 
    ```sql
-   insert into public.profiles (id, full_name, department, job_title, bio, location, interests, photo_url, contact_url, created_at)
+   insert into public.profiles (id, full_name, department, job_title, bio, location, interests, photo_path, contact_url, created_at)
    select backup.id, backup.full_name, backup.department, backup.job_title, backup.bio,
-          backup.location, coalesce(backup.interests, '{}'), backup.photo_url, backup.contact_url, backup.created_at
+          backup.location, coalesce(backup.interests, '{}'), backup.photo_path, backup.contact_url, backup.created_at
    from private.profiles_backup as backup
    where exists (select 1 from auth.users as auth_user where auth_user.id = backup.id);
    ```
 
-   If a row fails a check constraint (for example, a `photo_url` that uses
-   `http://`), fix that value in the backup and re-run the insert.
+   If the old table had `photo_url` instead of `photo_path`, use `null` in
+   place of `backup.photo_path`. Photo links can't be carried over, so those
+   users upload a photo instead. If a row fails a check constraint (for
+   example, a `contact_url` that uses `http://`), fix that value in the backup
+   and re-run the insert.
 
 7. When you've confirmed the restored data, drop the backup with
    `drop table private.profiles_backup;`. Don't add `private` to the exposed
@@ -248,13 +280,14 @@ behaves as it would for a signed-in user.
    rollback;
    ```
 
-5. **Constraints reject bad data.** Expected result: a check-constraint
-   violation (`profiles_photo_url_check`).
+5. **Constraints reject bad data.** A profile can't point at a photo in
+   another user's folder. Expected result: a check-constraint violation
+   (`profiles_photo_path_check`).
 
    ```sql
    begin;
-   insert into public.profiles (id, full_name, photo_url)
-   values ('USER_A_ID', 'Ada Lovelace', 'http://insecure.example.com/a.png');
+   insert into public.profiles (id, full_name, photo_path)
+   values ('USER_A_ID', 'Ada Lovelace', 'USER_B_ID/33333333-3333-4333-8333-333333333333.jpg');
    rollback;
    ```
 
@@ -271,3 +304,8 @@ behaves as it would for a signed-in user.
 7. **Dashboard check.** Go to **Authentication** → **Policies** → `profiles`.
    You should see exactly three policies (select, insert, update), all for
    the `authenticated` role.
+
+8. **Photo storage.** Go to **Storage**. The `avatars` bucket is listed as
+   private, with a 2 MB limit and JPG, PNG, and WebP allowed. Under
+   **Storage** → **Policies**, `storage.objects` has four `avatars` policies
+   (view, upload, replace, delete), all for `authenticated`.

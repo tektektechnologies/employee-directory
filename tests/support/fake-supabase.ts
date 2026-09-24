@@ -37,9 +37,20 @@ export function fakeSupabase(respond: (query: Query) => QueryResult) {
     return builder;
   }
 
+  const removedFiles: string[] = [];
+  const storage = {
+    from: () => ({
+      remove: async (paths: string[]) => {
+        removedFiles.push(...paths);
+        return { data: [], error: null };
+      },
+    }),
+  };
+
   return {
-    client: { from } as unknown as ServerClient,
+    client: { from, storage } as unknown as ServerClient,
     queries,
+    removedFiles,
   };
 }
 

@@ -1,4 +1,5 @@
-import { toContactLink, toHttpsUrl } from "./links";
+import { toContactLink } from "./links";
+import { isOwnPhotoPath } from "./photos";
 
 // Mirrors the check constraints in the profiles migration, so users see a
 // field message instead of a database error.
@@ -36,7 +37,7 @@ export type ProfileValues = {
   location: string;
   bio: string;
   interests: string;
-  photoUrl: string;
+  photoPath: string;
   contactUrl: string;
 };
 
@@ -49,12 +50,12 @@ export type ProfileRow = {
   location: string | null;
   bio: string | null;
   interests: string[];
-  photo_url: string | null;
+  photo_path: string | null;
   contact_url: string | null;
 };
 
 export const PROFILE_COLUMNS =
-  "full_name, department, job_title, location, bio, interests, photo_url, contact_url";
+  "full_name, department, job_title, location, bio, interests, photo_path, contact_url";
 
 export const emptyValues: ProfileValues = {
   fullName: "",
@@ -63,7 +64,7 @@ export const emptyValues: ProfileValues = {
   location: "",
   bio: "",
   interests: "",
-  photoUrl: "",
+  photoPath: "",
   contactUrl: "",
 };
 
@@ -75,7 +76,7 @@ export function rowToValues(row: ProfileRow): ProfileValues {
     location: row.location ?? "",
     bio: row.bio ?? "",
     interests: row.interests.join(", "),
-    photoUrl: row.photo_url ?? "",
+    photoPath: row.photo_path ?? "",
     contactUrl: row.contact_url ?? "",
   };
 }
@@ -99,7 +100,7 @@ function splitInterests(text: string) {
   return interests;
 }
 
-export function validateProfile(formData: FormData) {
+export function validateProfile(formData: FormData, userId: string) {
   const values: ProfileValues = {
     fullName: getField(formData, "fullName"),
     department: getField(formData, "department"),
@@ -107,7 +108,7 @@ export function validateProfile(formData: FormData) {
     location: getField(formData, "location"),
     bio: getField(formData, "bio"),
     interests: getField(formData, "interests"),
-    photoUrl: getField(formData, "photoUrl"),
+    photoPath: getField(formData, "photoPath"),
     contactUrl: getField(formData, "contactUrl"),
   };
   const errors: Partial<Record<ProfileField, string>> = {};
@@ -139,9 +140,8 @@ export function validateProfile(formData: FormData) {
     errors.interests = `Keep each interest to ${LIMITS.interestLength} characters or fewer.`;
   }
 
-  const photoUrl = toHttpsUrl(values.photoUrl);
-  if (values.photoUrl && (!photoUrl || photoUrl.length > LIMITS.url)) {
-    errors.photoUrl = "Enter a full image link that starts with https://";
+  if (values.photoPath && !isOwnPhotoPath(values.photoPath, userId)) {
+    errors.photoPath = "That photo couldn't be used. Upload it again.";
   }
 
   const contact = toContactLink(values.contactUrl);
@@ -160,7 +160,7 @@ export function validateProfile(formData: FormData) {
     location: values.location,
     bio: values.bio,
     interests,
-    photo_url: photoUrl,
+    photo_path: values.photoPath || null,
     contact_url: contact?.href ?? null,
   };
   return { values, errors, row };

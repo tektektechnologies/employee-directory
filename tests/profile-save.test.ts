@@ -3,17 +3,20 @@ import { fakeSupabase, findCall, isWrite, type Query, type QueryResult } from ".
 
 const MY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+const OTHER_PHOTO = `${OTHER_ID}/33333333-3333-4333-8333-333333333333.jpg`;
 
 const session = vi.hoisted(() => ({
   user: null as { id: string; email: string | null } | null,
   respond: (() => ({ data: null, error: null })) as (query: Query) => QueryResult,
   queries: [] as Query[],
+  removedFiles: [] as string[],
 }));
 
 vi.mock("@/lib/auth/user", () => ({
   getUser: async () => {
     const fake = fakeSupabase((query) => session.respond(query));
     session.queries = fake.queries;
+    session.removedFiles = fake.removedFiles;
     return { supabase: fake.client, user: session.user };
   },
 }));
@@ -38,7 +41,7 @@ function profileForm(overrides: Record<string, string> = {}) {
     location: "London",
     bio: "Works on analytical engines.",
     interests: "poetry, mathematics",
-    photoUrl: "",
+    photoPath: "",
     contactUrl: "",
     ...overrides,
   };
@@ -55,6 +58,7 @@ function writes() {
 beforeEach(() => {
   session.user = { id: MY_ID, email: "ada@example.com" };
   session.queries = [];
+  session.removedFiles = [];
 });
 
 describe("saving your own profile", () => {
@@ -99,6 +103,39 @@ describe("saving your own profile", () => {
   });
 });
 
+describe("profile photos", () => {
+  const oldPhoto = `${MY_ID}/44444444-4444-4444-8444-444444444444.jpg`;
+  const newPhoto = `${MY_ID}/55555555-5555-4555-8555-555555555555.png`;
+
+  it("deletes the previous photo only after the new one is saved", async () => {
+    session.respond = () => ({ data: { id: MY_ID, photo_path: oldPhoto }, error: null });
+
+    await saveProfile(initialState, profileForm({ photoPath: newPhoto }));
+
+    expect(findCall(writes()[0], "update")?.args[0]).toMatchObject({ photo_path: newPhoto });
+    expect(session.removedFiles).toEqual([oldPhoto]);
+  });
+
+  it("keeps the previous photo when the save fails", async () => {
+    session.respond = (query) =>
+      findCall(query, "update")
+        ? { data: null, error: { code: "XX000" } }
+        : { data: { id: MY_ID, photo_path: oldPhoto }, error: null };
+
+    await saveProfile(initialState, profileForm({ photoPath: newPhoto }));
+
+    expect(session.removedFiles).toEqual([]);
+  });
+
+  it("keeps the photo when it hasn't changed", async () => {
+    session.respond = () => ({ data: { id: MY_ID, photo_path: oldPhoto }, error: null });
+
+    await saveProfile(initialState, profileForm({ photoPath: oldPhoto }));
+
+    expect(session.removedFiles).toEqual([]);
+  });
+});
+
 describe("editing someone else's profile", () => {
   it("ignores an owner id smuggled into the form and writes only the signed-in user's row", async () => {
     session.respond = () => ({ data: { id: MY_ID }, error: null });
@@ -135,13 +172,13 @@ describe("invalid input", () => {
   it("returns field errors, keeps the entered values, and writes nothing", async () => {
     const result = await saveProfile(
       initialState,
-      profileForm({ fullName: "   ", photoUrl: "javascript:alert(1)" }),
+      profileForm({ fullName: "   ", photoPath: OTHER_PHOTO }),
     );
 
     expect(result.status).toBe("error");
     expect(result.errors).toHaveProperty("fullName");
-    expect(result.errors).toHaveProperty("photoUrl");
-    expect(result.values?.photoUrl).toBe("javascript:alert(1)");
+    expect(result.errors).toHaveProperty("photoPath");
+    expect(result.values?.bio).toBe("Works on analytical engines.");
     expect(session.queries).toHaveLength(0);
   });
 });

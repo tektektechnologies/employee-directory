@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/auth/redirects";
 import { getUser } from "@/lib/auth/user";
 import { validateProfile } from "@/lib/profiles/fields";
+import { PHOTO_BUCKET } from "@/lib/profiles/photos";
 import type { ProfileState } from "./form-state";
 
 const UNIQUE_VIOLATION = "23505";
@@ -18,7 +19,7 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
     redirect(signInPath("/profile/edit"));
   }
 
-  const { values, errors, row } = validateProfile(formData);
+  const { values, errors, row } = validateProfile(formData, user.id);
   if (!row) {
     const count = Object.keys(errors).length;
     return {
@@ -40,9 +41,9 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
 
   const { data: existing, error: lookupError } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, photo_path")
     .eq("id", user.id)
-    .maybeSingle();
+    .maybeSingle<{ id: string; photo_path: string | null }>();
   if (lookupError) {
     return failed();
   }
@@ -69,6 +70,13 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
     if (error || !updated) {
       return failed(error?.code);
     }
+  }
+
+  const oldPhoto = existing?.photo_path;
+  if (oldPhoto && oldPhoto !== row.photo_path) {
+    // Best effort: a leftover file is harmless, so a failure here doesn't
+    // fail the save.
+    await supabase.storage.from(PHOTO_BUCKET).remove([oldPhoto]);
   }
 
   revalidatePath("/", "layout");

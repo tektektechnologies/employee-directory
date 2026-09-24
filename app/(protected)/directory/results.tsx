@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { secondaryButton, textLink } from "@/components/styles";
 import { directoryHref, getProfiles, type Filters } from "@/lib/profiles/directory";
+import { getPhotoUrls } from "@/lib/profiles/photos";
 import type { ServerClient } from "@/lib/supabase/server";
 import { ProfileCard } from "./profile-card";
 
@@ -53,6 +54,11 @@ export async function Results({ supabase, filters, userId }: ResultsProps) {
 
   const count = profiles.length === 1 ? "1 person" : `${profiles.length} people`;
 
+  const photoUrls = await getPhotoUrls(
+    supabase,
+    profiles.flatMap((profile) => (profile.photoPath ? [profile.photoPath] : [])),
+  );
+
   return (
     <>
       <p role="status" className="mb-4 text-sm text-stone-600">
@@ -60,7 +66,12 @@ export async function Results({ supabase, filters, userId }: ResultsProps) {
       </p>
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {profiles.map((profile) => (
-          <ProfileCard key={profile.id} profile={profile} isYou={profile.id === userId} />
+          <ProfileCard
+            key={profile.id}
+            profile={profile}
+            photoUrl={profile.photoPath ? (photoUrls.get(profile.photoPath) ?? null) : null}
+            isYou={profile.id === userId}
+          />
         ))}
       </ul>
     </>

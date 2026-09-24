@@ -18,6 +18,7 @@ export type CardProfile = {
   department: string | null;
   location: string | null;
   bio: string | null;
+  photoPath: string | null;
 };
 
 type CardRow = {
@@ -27,6 +28,7 @@ type CardRow = {
   department: string | null;
   location: string | null;
   bio: string | null;
+  photo_path: string | null;
 };
 
 function first(value: string | string[] | undefined) {
@@ -76,7 +78,7 @@ export async function hasProfile(supabase: ServerClient, userId: string) {
 }
 
 export async function getProfiles(supabase: ServerClient, { query, department }: Filters) {
-  let request = supabase.from("profiles").select("id, full_name, job_title, department, location, bio");
+  let request = supabase.from("profiles").select("id, full_name, job_title, department, location, bio, photo_path");
 
   if (query) {
     request = request.ilike("full_name", `%${escapeLike(query)}%`);
@@ -101,6 +103,7 @@ export async function getProfiles(supabase: ServerClient, { query, department }:
     department: row.department,
     location: row.location,
     bio: shortBio(row.bio),
+    photoPath: row.photo_path,
   }));
   return { profiles, failed: false };
 }

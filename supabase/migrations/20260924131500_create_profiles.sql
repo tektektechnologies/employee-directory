@@ -14,8 +14,13 @@ create table public.profiles (
     check (char_length(location) <= 100),
   interests text[] not null default '{}'
     check (cardinality(interests) <= 20),
-  photo_url text
-    check (char_length(photo_url) <= 2048 and photo_url ~* '^https://'),
+  -- The path must sit in the owner's own folder, so a profile can't point at
+  -- someone else's photo.
+  photo_path text
+    constraint profiles_photo_path_check check (
+      photo_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}\.(jpg|png|webp)$'
+      and split_part(photo_path, '/', 1) = id::text
+    ),
   contact_url text
     check (char_length(contact_url) <= 2048 and contact_url ~* '^(https://|mailto:)'),
   created_at timestamptz not null default now(),
@@ -27,6 +32,7 @@ create table public.profiles (
 
 comment on table public.profiles is 'Employee directory profile, one per auth user.';
 comment on column public.profiles.job_title is 'The employee''s role at the company.';
+comment on column public.profiles.photo_path is 'Object path in the avatars bucket: <user id>/<file id>.<ext>.';
 
 create index profiles_department_idx on public.profiles (department);
 
@@ -77,12 +83,12 @@ grant select on public.profiles to authenticated;
 
 grant insert (
   id, full_name, department, job_title, bio, location,
-  interests, photo_url, contact_url
+  interests, photo_path, contact_url
 ) on public.profiles to authenticated;
 
 grant update (
   full_name, department, job_title, bio, location,
-  interests, photo_url, contact_url
+  interests, photo_path, contact_url
 ) on public.profiles to authenticated;
 
 alter table public.profiles enable row level security;
@@ -105,3 +111,48 @@ create policy "Users can update their own profile"
   to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
+
+-- Profile photos live in a private Storage bucket; the profile stores only the
+-- object path. Only signed-in users can read them, through short-lived signed
+-- URLs. The size and type limits are enforced by Storage, whatever the client
+-- sends.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', false, 2097152, array['image/jpeg', 'image/png', 'image/webp']);
+
+-- Every user uploads into a folder named after their own user id.
+create policy "Authenticated users can view avatars"
+  on storage.objects
+  for select
+  to authenticated
+  using (bucket_id = 'avatars');
+
+create policy "Users can upload their own avatars"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create policy "Users can replace their own avatars"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  )
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create policy "Users can delete their own avatars"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );

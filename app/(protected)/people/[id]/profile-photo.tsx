@@ -33,7 +33,7 @@ export function ProfilePhoto({ photoUrl, fullName }: ProfilePhotoProps) {
 
   return (
     <div className={frameClass}>
-      {/* next/image would need every user-supplied host allow-listed in next.config. */}
+      {/* Signed URLs expire, so they shouldn't go through the next/image cache. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photoUrl}

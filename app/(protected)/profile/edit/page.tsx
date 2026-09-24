@@ -3,6 +3,7 @@ import Link from "next/link";
 import { textLink } from "@/components/styles";
 import { requireUser } from "@/lib/auth/user";
 import { PROFILE_COLUMNS, emptyValues, rowToValues, type ProfileRow } from "@/lib/profiles/fields";
+import { getPhotoUrl } from "@/lib/profiles/photos";
 import { ProfileForm } from "./profile-form";
 
 export const metadata: Metadata = { title: "Your profile" };
@@ -16,10 +17,12 @@ export default async function EditProfilePage() {
     .eq("id", user.id)
     .maybeSingle<ProfileRow>();
   if (error) {
+    console.error("Loading profile failed:", error.message);
     throw new Error("Couldn't load your profile.");
   }
 
   const isNew = !profile;
+  const photoSrc = await getPhotoUrl(supabase, profile?.photo_path ?? null);
   const profileHref = `/people/${user.id}`;
 
   return (
@@ -53,6 +56,8 @@ export default async function EditProfilePage() {
         <ProfileForm
           isNew={isNew}
           profileHref={profileHref}
+          userId={user.id}
+          photoSrc={photoSrc}
           saved={profile ? rowToValues(profile) : emptyValues}
         />
       </div>

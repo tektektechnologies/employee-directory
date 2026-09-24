@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Field, Select, TextArea } from "@/components/field";
 import { StatusMessage } from "@/components/status-message";
 import { primaryButton, secondaryButton, textLink } from "@/components/styles";
@@ -9,15 +9,19 @@ import { useFocusResult } from "@/components/use-focus-result";
 import { DEPARTMENTS, LIMITS, type ProfileValues } from "@/lib/profiles/fields";
 import { saveProfile } from "./actions";
 import { initialState } from "./form-state";
+import { PhotoField } from "./photo-field";
 
 type ProfileFormProps = {
   saved: ProfileValues;
   isNew: boolean;
   profileHref: string;
+  userId: string;
+  photoSrc: string | null;
 };
 
-export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
+export function ProfileForm({ saved, isNew, profileHref, userId, photoSrc }: ProfileFormProps) {
   const [state, formAction, pending] = useActionState(saveProfile, initialState);
+  const [uploading, setUploading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   useFocusResult(formRef, messageRef, state);
@@ -41,7 +45,15 @@ export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
         </StatusMessage>
       )}
 
-      <fieldset className="grid gap-5 sm:grid-cols-2">
+      <PhotoField
+        userId={userId}
+        savedPath={saved.photoPath}
+        savedSrc={photoSrc}
+        error={errors.photoPath}
+        onBusyChange={setUploading}
+      />
+
+      <fieldset className="grid gap-5 border-t border-stone-200 pt-6 sm:grid-cols-2">
         <legend className="mb-4 text-base font-semibold text-stone-900">About you</legend>
         <div className="sm:col-span-2">
           <Field
@@ -107,20 +119,8 @@ export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-5 border-t border-stone-200 pt-6 sm:grid-cols-2">
-        <legend className="mb-4 text-base font-semibold text-stone-900">Links</legend>
-        <Field
-          name="photoUrl"
-          label="Photo URL"
-          type="url"
-          inputMode="url"
-          autoComplete="photo"
-          required={false}
-          maxLength={LIMITS.url}
-          hint="Link to an image, starting with https://"
-          defaultValue={values.photoUrl}
-          error={errors.photoUrl}
-        />
+      <fieldset className="border-t border-stone-200 pt-6">
+        <legend className="mb-4 text-base font-semibold text-stone-900">Contact</legend>
         <Field
           name="contactUrl"
           label="Contact link"
@@ -141,8 +141,8 @@ export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
             Cancel
           </Link>
         )}
-        <button type="submit" disabled={pending} className={`${primaryButton} px-5`}>
-          {pending ? "Saving…" : isNew ? "Save and open directory" : "Save changes"}
+        <button type="submit" disabled={pending || uploading} className={`${primaryButton} px-5`}>
+          {pending ? "Saving…" : uploading ? "Waiting for photo…" : isNew ? "Save and open directory" : "Save changes"}
         </button>
       </div>
     </form>

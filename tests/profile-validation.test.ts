@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { validateProfile } from "@/lib/profiles/fields";
 import { toContactLink, toHttpsUrl } from "@/lib/profiles/links";
 
-function profileForm(overrides: Record<string, string> = {}) {
+const MY_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+const FILE_ID = "33333333-3333-4333-8333-333333333333";
+
+function validate(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const fields = {
     fullName: "Ada Lovelace",
@@ -11,70 +15,70 @@ function profileForm(overrides: Record<string, string> = {}) {
     location: "London",
     bio: "Works on analytical engines.",
     interests: "poetry, mathematics",
-    photoUrl: "",
+    photoPath: "",
     contactUrl: "",
     ...overrides,
   };
   for (const [name, value] of Object.entries(fields)) {
     formData.set(name, value);
   }
-  return formData;
+  return validateProfile(formData, MY_ID);
 }
 
 describe("validateProfile", () => {
   it("accepts a complete profile and trims values", () => {
-    const { errors, row } = validateProfile(
-      profileForm({ fullName: "  Ada Lovelace  ", photoUrl: "https://example.com/ada.png" }),
-    );
+    const { errors, row } = validate({ fullName: "  Ada Lovelace  " });
 
     expect(errors).toEqual({});
-    expect(row).toMatchObject({
-      full_name: "Ada Lovelace",
-      photo_url: "https://example.com/ada.png",
-      contact_url: null,
-    });
+    expect(row).toMatchObject({ full_name: "Ada Lovelace", photo_path: null, contact_url: null });
   });
 
   it.each(["fullName", "department", "jobTitle", "location", "bio"])("requires %s", (field) => {
-    const { errors, row } = validateProfile(profileForm({ [field]: "   " }));
+    const { errors, row } = validate({ [field]: "   " });
     expect(row).toBeNull();
     expect(errors).toHaveProperty(field);
   });
 
   it("accepts only departments from the list", () => {
-    expect(validateProfile(profileForm({ department: "Logic and Foundations of Mathematics" })).row).not.toBeNull();
+    expect(validate({ department: "Logic and Foundations of Mathematics" }).row).not.toBeNull();
     for (const department of ["Applied Research", "algebra", "Algebra and Geometry"]) {
-      expect(validateProfile(profileForm({ department })).errors).toHaveProperty("department");
+      expect(validate({ department }).errors).toHaveProperty("department");
     }
   });
 
   it("rejects values longer than the database allows", () => {
-    const { errors } = validateProfile(profileForm({ fullName: "a".repeat(101), bio: "b".repeat(1001) }));
+    const { errors } = validate({ fullName: "a".repeat(101), bio: "b".repeat(1001) });
     expect(errors).toHaveProperty("fullName");
     expect(errors).toHaveProperty("bio");
   });
 
   it("splits interests, drops blanks and case-insensitive duplicates", () => {
-    const { row } = validateProfile(profileForm({ interests: "Chess, chess ,, Topology,  cycling " }));
+    const { row } = validate({ interests: "Chess, chess ,, Topology,  cycling " });
     expect(row?.interests).toEqual(["Chess", "Topology", "cycling"]);
   });
 
   it("rejects missing, too many, and too long interests", () => {
     const tooMany = Array.from({ length: 21 }, (_, i) => `topic ${i}`).join(",");
     for (const interests of ["", " , ", tooMany, "x".repeat(41)]) {
-      expect(validateProfile(profileForm({ interests })).errors).toHaveProperty("interests");
+      expect(validate({ interests }).errors).toHaveProperty("interests");
     }
   });
 
+  it("accepts a photo uploaded to your own folder", () => {
+    const { row } = validate({ photoPath: `${MY_ID}/${FILE_ID}.webp` });
+    expect(row?.photo_path).toBe(`${MY_ID}/${FILE_ID}.webp`);
+  });
+
   it.each([
-    ["photoUrl", "http://example.com/a.png"],
-    ["photoUrl", "javascript:alert(1)"],
-    ["photoUrl", `https://example.com/${"a".repeat(2050)}`],
+    ["photoPath", `${OTHER_ID}/${FILE_ID}.jpg`],
+    ["photoPath", `${MY_ID}/../${OTHER_ID}/${FILE_ID}.jpg`],
+    ["photoPath", `${MY_ID}/${FILE_ID}.svg`],
+    ["photoPath", "https://example.com/a.png"],
     ["contactUrl", "ftp://example.com"],
     ["contactUrl", "mailto:not-an-email"],
     ["contactUrl", "data:text/html,hi"],
   ])("rejects %s = %s", (field, value) => {
-    const { errors, row } = validateProfile(profileForm({ [field]: value }));
+    const { errors, row } = validate({ [field]: value });
     expect(row).toBeNull();
     expect(errors).toHaveProperty(field);
   });

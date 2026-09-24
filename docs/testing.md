@@ -12,8 +12,8 @@ Supabase project. They cover the highest-risk behavior:
 | File                                   | What it proves                                                                                                   |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `tests/unauthenticated-access.test.ts` | Signed-out requests to `/directory`, `/people/[id]`, and `/profile/edit` redirect to sign-in with a safe `next`. Verified users pass. Refreshed cookies survive the redirect. `next` can't point off-site. |
-| `tests/profile-save.test.ts`           | Saving writes only the signed-in user's row. The first save inserts under their id, and a duplicate insert becomes an update. An `id` smuggled into the form is ignored. Signed-out saves touch nothing. |
-| `tests/profile-validation.test.ts`     | Required fields, length limits, the fixed department list, interest rules, and the `https`/`mailto` link rules shared by saving and rendering. |
+| `tests/profile-save.test.ts`           | Saving writes only the signed-in user's row. The first save inserts under their id, and a duplicate insert becomes an update. An `id` smuggled into the form is ignored. Signed-out saves touch nothing. The old photo file is deleted only after a new one is saved. |
+| `tests/profile-validation.test.ts`     | Required fields, length limits, the fixed department list, interest rules, photo paths limited to your own folder, and the `https`/`mailto` link rules shared by saving and rendering. |
 | `tests/directory-filters.test.ts`      | Search and department combine with AND. Unknown departments in the URL are ignored. `%` and `_` are literal. No email is selected. Load errors stay distinct from empty results. |
 
 Supabase is replaced by a small recording fake (`tests/support/fake-supabase.ts`)
