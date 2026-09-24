@@ -1,3 +1,5 @@
+import { getSafeContactLink, getSafeHttpsUrl } from "./external-links";
+
 // Limits mirror the check constraints in the profiles migration, so users get a
 // field-level message instead of a database error.
 export const PROFILE_LIMITS = {
@@ -81,22 +83,6 @@ function splitInterests(rawInterests: string) {
   return interests;
 }
 
-function isHttpsUrl(candidate: string) {
-  try {
-    const parsedUrl = new URL(candidate);
-    return parsedUrl.protocol === "https:" && Boolean(parsedUrl.hostname);
-  } catch {
-    return false;
-  }
-}
-
-function isContactLink(candidate: string) {
-  if (candidate.toLowerCase().startsWith("mailto:")) {
-    return /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(candidate);
-  }
-  return isHttpsUrl(candidate);
-}
-
 export function parseProfileForm(formData: FormData) {
   const values: ProfileFormValues = {
     fullName: readTrimmedField(formData, "fullName"),
@@ -134,16 +120,18 @@ export function parseProfileForm(formData: FormData) {
     fieldErrors.interests = `Keep each interest under ${PROFILE_LIMITS.interestLength} characters.`;
   }
 
-  if (values.photoUrl) {
-    if (values.photoUrl.length > PROFILE_LIMITS.url || !isHttpsUrl(values.photoUrl)) {
-      fieldErrors.photoUrl = "Enter a full image link starting with https://.";
-    }
+  const safePhotoUrl = getSafeHttpsUrl(values.photoUrl);
+  if (values.photoUrl && (!safePhotoUrl || safePhotoUrl.length > PROFILE_LIMITS.url)) {
+    fieldErrors.photoUrl = "Enter a full image link starting with https://.";
   }
 
-  if (values.contactUrl) {
-    if (values.contactUrl.length > PROFILE_LIMITS.url || !isContactLink(values.contactUrl)) {
-      fieldErrors.contactUrl = "Enter a link starting with https:// or an email like mailto:you@example.com.";
-    }
+  const safeContactLink = getSafeContactLink(values.contactUrl);
+  if (
+    values.contactUrl &&
+    (!safeContactLink || safeContactLink.href.length > PROFILE_LIMITS.url)
+  ) {
+    fieldErrors.contactUrl =
+      "Enter a link starting with https:// or an email like mailto:you@example.com.";
   }
 
   if (Object.keys(fieldErrors).length > 0) {
@@ -157,8 +145,8 @@ export function parseProfileForm(formData: FormData) {
     location: values.location,
     bio: values.bio,
     interests,
-    photo_url: values.photoUrl || null,
-    contact_url: values.contactUrl || null,
+    photo_url: safePhotoUrl,
+    contact_url: safeContactLink?.href ?? null,
   };
   return { values, fieldErrors, profileRow };
 }

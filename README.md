@@ -10,8 +10,8 @@ Supabase for authentication and data.
 Current status: registration, email confirmation, sign-in, and sign-out work.
 New users set up their profile before they reach the directory, and
 `/profile/edit` handles later changes. The directory lists colleagues as cards,
-with name search and a department filter. Person pages are protected but still
-show placeholders.
+with name search and a department filter, and each card opens that person's
+full profile at `/people/[id]`.
 
 ## Local setup
 
