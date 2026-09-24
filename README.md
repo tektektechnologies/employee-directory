@@ -55,6 +55,8 @@ Requirements: Node.js 20.9 or newer and npm.
 
 - `npm run dev` — start the development server
 - `npm run lint` — run ESLint
+- `npm test` — run the automated tests (see [docs/testing.md](docs/testing.md),
+  which also has the two-account database policy checks)
 - `npm run build` — create a production build
 - `npm run start` — serve the production build
 
@@ -72,9 +74,11 @@ lib/
   auth/               Verified-user checks and safe redirect helpers
   supabase/           Server, browser, and proxy Supabase clients
 proxy.ts              Session refresh and route protection on every request
+tests/                Vitest tests for access, profile saving, validation, and directory filters
 docs/
   auth.md             Auth design and Supabase URL settings
   database.md         Schema, access rules, and how to apply migrations
+  testing.md          How to run tests and verify RLS with two accounts
 supabase/
   migrations/         Versioned SQL migrations, applied in filename order
 ```
