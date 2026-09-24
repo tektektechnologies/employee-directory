@@ -41,6 +41,10 @@ Requirements: Node.js 20.9 or newer and npm.
    npm run dev
    ```
 
+4. Apply the database migrations in `supabase/migrations/` to your Supabase
+   project. See [docs/database.md](docs/database.md) for step-by-step
+   instructions and a policy verification checklist.
+
 ## Scripts
 
 - `npm run dev` — start the development server
@@ -55,4 +59,8 @@ app/
   layout.tsx    Root layout and metadata
   page.tsx      Landing page
   globals.css   Tailwind entry point
+docs/
+  database.md   Schema, access rules, and how to apply migrations
+supabase/
+  migrations/   Versioned SQL migrations, applied in filename order
 ```
