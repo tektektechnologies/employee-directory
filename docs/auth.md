@@ -49,8 +49,15 @@ In the Supabase dashboard for your project:
    in. For a narrower rule, use `http://localhost:3000/auth/confirm**`
    instead.
 
-   When you deploy, add your production origin the same way (for example
-   `https://directory.example.com/**`) and change the Site URL to it.
+   When you deploy, change the Site URL to the production address and add it
+   to the allow list. The README's
+   [Deploying to Vercel](../README.md#deploying-to-vercel) section has the
+   exact settings, including the wildcard for preview deployments.
+
+   The redirect is built from the address the user registered on. Production
+   users are sent back to production, preview users to that preview, and
+   local users to localhost. Supabase ignores any address that isn't on the
+   list and uses the Site URL instead.
 
 2. **Authentication → Sign In / Providers → Email**
    - Keep **Enable Email provider** on.
