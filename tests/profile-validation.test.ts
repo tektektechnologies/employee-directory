@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getSafeContactLink, getSafeHttpsUrl } from "@/lib/profiles/external-links";
-import { parseProfileForm } from "@/lib/profiles/profile-fields";
+import { validateProfile } from "@/lib/profiles/fields";
+import { toContactLink, toHttpsUrl } from "@/lib/profiles/links";
 
-function buildProfileForm(overrides: Record<string, string> = {}) {
+function profileForm(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const fields = {
     fullName: "Ada Lovelace",
@@ -15,58 +15,47 @@ function buildProfileForm(overrides: Record<string, string> = {}) {
     contactUrl: "",
     ...overrides,
   };
-  for (const [fieldName, fieldValue] of Object.entries(fields)) {
-    formData.set(fieldName, fieldValue);
+  for (const [name, value] of Object.entries(fields)) {
+    formData.set(name, value);
   }
   return formData;
 }
 
-describe("parseProfileForm", () => {
+describe("validateProfile", () => {
   it("accepts a complete profile and trims values", () => {
-    const { fieldErrors, profileRow } = parseProfileForm(
-      buildProfileForm({ fullName: "  Ada Lovelace  ", photoUrl: "https://example.com/ada.png" }),
+    const { errors, row } = validateProfile(
+      profileForm({ fullName: "  Ada Lovelace  ", photoUrl: "https://example.com/ada.png" }),
     );
 
-    expect(fieldErrors).toEqual({});
-    expect(profileRow).toMatchObject({
+    expect(errors).toEqual({});
+    expect(row).toMatchObject({
       full_name: "Ada Lovelace",
       photo_url: "https://example.com/ada.png",
       contact_url: null,
     });
   });
 
-  it.each(["fullName", "department", "jobTitle", "location", "bio"])(
-    "requires %s",
-    (requiredField) => {
-      const { fieldErrors, profileRow } = parseProfileForm(
-        buildProfileForm({ [requiredField]: "   " }),
-      );
-      expect(profileRow).toBeNull();
-      expect(fieldErrors).toHaveProperty(requiredField);
-    },
-  );
+  it.each(["fullName", "department", "jobTitle", "location", "bio"])("requires %s", (field) => {
+    const { errors, row } = validateProfile(profileForm({ [field]: "   " }));
+    expect(row).toBeNull();
+    expect(errors).toHaveProperty(field);
+  });
 
   it("rejects values longer than the database allows", () => {
-    const { fieldErrors } = parseProfileForm(
-      buildProfileForm({ fullName: "a".repeat(101), bio: "b".repeat(1001) }),
-    );
-    expect(fieldErrors).toHaveProperty("fullName");
-    expect(fieldErrors).toHaveProperty("bio");
+    const { errors } = validateProfile(profileForm({ fullName: "a".repeat(101), bio: "b".repeat(1001) }));
+    expect(errors).toHaveProperty("fullName");
+    expect(errors).toHaveProperty("bio");
   });
 
   it("splits interests, drops blanks and case-insensitive duplicates", () => {
-    const { profileRow } = parseProfileForm(
-      buildProfileForm({ interests: "Chess, chess ,, Topology,  cycling " }),
-    );
-    expect(profileRow?.interests).toEqual(["Chess", "Topology", "cycling"]);
+    const { row } = validateProfile(profileForm({ interests: "Chess, chess ,, Topology,  cycling " }));
+    expect(row?.interests).toEqual(["Chess", "Topology", "cycling"]);
   });
 
   it("rejects missing, too many, and too long interests", () => {
-    const tooMany = Array.from({ length: 21 }, (_, index) => `topic ${index}`).join(",");
+    const tooMany = Array.from({ length: 21 }, (_, i) => `topic ${i}`).join(",");
     for (const interests of ["", " , ", tooMany, "x".repeat(41)]) {
-      expect(parseProfileForm(buildProfileForm({ interests })).fieldErrors).toHaveProperty(
-        "interests",
-      );
+      expect(validateProfile(profileForm({ interests })).errors).toHaveProperty("interests");
     }
   });
 
@@ -77,12 +66,10 @@ describe("parseProfileForm", () => {
     ["contactUrl", "ftp://example.com"],
     ["contactUrl", "mailto:not-an-email"],
     ["contactUrl", "data:text/html,hi"],
-  ])("rejects %s = %s", (fieldName, fieldValue) => {
-    const { fieldErrors, profileRow } = parseProfileForm(
-      buildProfileForm({ [fieldName]: fieldValue }),
-    );
-    expect(profileRow).toBeNull();
-    expect(fieldErrors).toHaveProperty(fieldName);
+  ])("rejects %s = %s", (field, value) => {
+    const { errors, row } = validateProfile(profileForm({ [field]: value }));
+    expect(row).toBeNull();
+    expect(errors).toHaveProperty(field);
   });
 });
 
@@ -95,17 +82,17 @@ describe("external link rules used for saving and rendering", () => {
     ["https://exa mple.com", null],
     ["//example.com/a.png", null],
     [null, null],
-  ])("getSafeHttpsUrl(%s) is %s", (candidate, expected) => {
-    expect(getSafeHttpsUrl(candidate)).toBe(expected);
+  ])("toHttpsUrl(%s) is %s", (text, expected) => {
+    expect(toHttpsUrl(text)).toBe(expected);
   });
 
   it("returns a readable label for web and email contact links", () => {
-    expect(getSafeContactLink("https://www.linkedin.com/in/ada")).toEqual({
+    expect(toContactLink("https://www.linkedin.com/in/ada")).toEqual({
       href: "https://www.linkedin.com/in/ada",
       label: "linkedin.com/in/ada",
       kind: "web",
     });
-    expect(getSafeContactLink("mailto:ada@example.com")).toEqual({
+    expect(toContactLink("mailto:ada@example.com")).toEqual({
       href: "mailto:ada@example.com",
       label: "ada@example.com",
       kind: "email",
@@ -113,7 +100,7 @@ describe("external link rules used for saving and rendering", () => {
   });
 
   it("rejects mailto links with extra parameters and script links", () => {
-    expect(getSafeContactLink("mailto:ada@example.com?bcc=x@example.com")).toBeNull();
-    expect(getSafeContactLink("javascript:alert(1)")).toBeNull();
+    expect(toContactLink("mailto:ada@example.com?bcc=x@example.com")).toBeNull();
+    expect(toContactLink("javascript:alert(1)")).toBeNull();
   });
 });

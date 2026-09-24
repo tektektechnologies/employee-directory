@@ -2,90 +2,58 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { FormStatusMessage } from "@/components/form-status-message";
-import { requireVerifiedUser } from "@/lib/auth/verified-user";
-import { fetchDirectoryDepartments, parseDirectoryFilters } from "@/lib/profiles/directory";
-import { DirectoryFiltersForm } from "./directory-filters-form";
-import { DirectoryResults } from "./directory-results";
-import { DirectoryResultsSkeleton } from "./directory-results-skeleton";
+import { StatusMessage } from "@/components/status-message";
+import { textLink } from "@/components/styles";
+import { requireUser } from "@/lib/auth/user";
+import { getDepartments, hasProfile, parseFilters } from "@/lib/profiles/directory";
+import { FilterForm } from "./filter-form";
+import { Results } from "./results";
+import { ResultsSkeleton } from "./results-skeleton";
 
-export const metadata: Metadata = { title: "Directory · Mathematics, Inc." };
-
-function buildDirectoryHref(nameQuery: string, department: string) {
-  const directorySearchParams = new URLSearchParams();
-  if (nameQuery) directorySearchParams.set("q", nameQuery);
-  if (department) directorySearchParams.set("department", department);
-  const queryString = directorySearchParams.toString();
-  return queryString ? `/directory?${queryString}` : "/directory";
-}
+export const metadata: Metadata = { title: "Directory" };
 
 export default async function DirectoryPage({ searchParams }: PageProps<"/directory">) {
-  const { supabase, user } = await requireVerifiedUser("/directory");
+  const { supabase, user } = await requireUser("/directory");
 
-  const { data: ownProfile, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (error) {
-    throw new Error("Couldn't load your profile.");
-  }
-  if (!ownProfile) {
+  if (!(await hasProfile(supabase, user.id))) {
     redirect("/profile/edit");
   }
 
-  const resolvedSearchParams = await searchParams;
-  const filters = parseDirectoryFilters(resolvedSearchParams);
-  const { departments, loadFailed: departmentsLoadFailed } =
-    await fetchDirectoryDepartments(supabase);
-  const isWelcome = resolvedSearchParams.welcome === "1";
+  const params = await searchParams;
+  const filters = parseFilters(params);
+  const { departments, failed: departmentsFailed } = await getDepartments(supabase);
+  const filterKey = `${filters.query}|${filters.department}`;
 
   return (
     <>
-      {isWelcome && (
-        <div className="mb-8 flex flex-col gap-3">
-          <FormStatusMessage
-            tone="success"
-            message="Your profile is set up. Colleagues can now find you in the directory."
-          />
-          <p className="text-sm text-stone-600">
-            <Link
-              href={`/people/${user.id}`}
-              className="font-medium text-indigo-700 underline-offset-2 hover:underline"
-            >
-              See how your profile looks
-            </Link>{" "}
-            or{" "}
-            <Link
-              href="/profile/edit"
-              className="font-medium text-indigo-700 underline-offset-2 hover:underline"
-            >
-              make changes
-            </Link>
-            .
-          </p>
+      {params.welcome === "1" && (
+        <div className="mb-6 sm:mb-8">
+          <StatusMessage tone="success">
+            <p className="font-medium">You&apos;re all set</p>
+            <p className="mt-1">
+              Your profile is saved and colleagues can now find you.{" "}
+              <Link href={`/people/${user.id}`} className={textLink}>
+                View your profile
+              </Link>
+            </p>
+          </StatusMessage>
         </div>
       )}
 
       <h1 className="text-2xl font-semibold tracking-tight">Directory</h1>
-      <p className="mt-2 mb-6 text-stone-600">Find colleagues by name or department.</p>
+      <p className="mt-1.5 mb-5 text-stone-600 sm:mb-6">
+        Search by name, filter by department, and open a card to see the full profile.
+      </p>
 
-      <DirectoryFiltersForm
-        key={`${filters.nameQuery}|${filters.department}`}
+      <FilterForm
+        key={filterKey}
         filters={filters}
         departments={departments}
-        departmentsLoadFailed={departmentsLoadFailed}
+        departmentsFailed={departmentsFailed}
       />
 
-      <Suspense
-        key={`${filters.nameQuery}|${filters.department}`}
-        fallback={<DirectoryResultsSkeleton />}
-      >
-        <DirectoryResults
-          supabase={supabase}
-          filters={filters}
-          retryHref={buildDirectoryHref(filters.nameQuery, filters.department)}
-        />
+      <Suspense key={filterKey} fallback={<ResultsSkeleton />}>
+        <Results supabase={supabase} filters={filters} userId={user.id} />
       </Suspense>
     </>
   );

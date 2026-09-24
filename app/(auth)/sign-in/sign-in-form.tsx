@@ -1,64 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { FormField } from "@/components/form-field";
-import { FormStatusMessage } from "@/components/form-status-message";
-import { signInWithPassword } from "../actions";
-import { initialAuthFormState } from "../form-state";
+import { useActionState, useRef } from "react";
+import { Field } from "@/components/field";
+import { StatusMessage } from "@/components/status-message";
+import { primaryButton, textLink } from "@/components/styles";
+import { useFocusResult } from "@/components/use-focus-result";
+import { signIn } from "../actions";
+import { initialState } from "../form-state";
+
+export type Notice = { tone: "error" | "info"; text: string };
 
 type SignInFormProps = {
-  redirectPath: string;
-  noticeMessage?: string;
+  next: string;
+  notice?: Notice;
 };
 
-export function SignInForm({ redirectPath, noticeMessage }: SignInFormProps) {
-  const [formState, submitSignIn, isSubmitting] = useActionState(
-    signInWithPassword,
-    initialAuthFormState,
-  );
+export function SignInForm({ next, notice }: SignInFormProps) {
+  const [state, formAction, pending] = useActionState(signIn, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  useFocusResult(formRef, messageRef, state);
+
+  const message: Notice | undefined =
+    state.status === "error" && state.message ? { tone: "error", text: state.message } : notice;
 
   return (
-    <form action={submitSignIn} noValidate className="flex flex-col gap-5">
-      <input type="hidden" name="next" value={redirectPath} />
+    <form ref={formRef} action={formAction} noValidate className="flex flex-col gap-5">
+      <input type="hidden" name="next" value={next} />
 
-      {formState.status === "error" && formState.message ? (
-        <FormStatusMessage tone="error" message={formState.message} />
-      ) : (
-        noticeMessage && <FormStatusMessage tone="error" message={noticeMessage} />
+      {message && (
+        <StatusMessage ref={messageRef} tone={message.tone}>
+          {message.text}
+        </StatusMessage>
       )}
 
-      <FormField
+      <Field
         name="email"
-        label="Work email"
+        label="Email"
         type="email"
         autoComplete="email"
-        defaultValue={formState.submittedEmail}
-        errorMessage={formState.fieldErrors?.email}
+        defaultValue={state.email}
+        error={state.errors?.email}
       />
-      <FormField
+      <Field
         name="password"
         label="Password"
         type="password"
         autoComplete="current-password"
-        errorMessage={formState.fieldErrors?.password}
+        error={state.errors?.password}
       />
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-stone-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isSubmitting ? "Signing in…" : "Sign in"}
+      <button type="submit" disabled={pending} className={primaryButton}>
+        {pending ? "Signing in…" : "Sign in"}
       </button>
 
       <p className="text-center text-sm text-stone-600">
-        New here?{" "}
-        <Link
-          href={`/register?next=${encodeURIComponent(redirectPath)}`}
-          className="font-medium text-indigo-700 underline-offset-2 hover:underline"
-        >
-          Create an account
+        Don&apos;t have an account?{" "}
+        <Link href={`/register?next=${encodeURIComponent(next)}`} className={textLink}>
+          Create one
         </Link>
       </p>
     </form>

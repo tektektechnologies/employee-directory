@@ -1,14 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getSupabaseConfig } from "./config";
+import { getSupabaseEnv } from "./config";
 
-export type SupabaseServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+export type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
-export async function createSupabaseServerClient() {
-  const { supabaseUrl, supabasePublishableKey } = getSupabaseConfig();
+export async function createClient() {
+  const { url, key } = getSupabaseEnv();
   const cookieStore = await cookies();
 
-  return createServerClient(supabaseUrl, supabasePublishableKey, {
+  return createServerClient(url, key, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

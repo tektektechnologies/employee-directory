@@ -10,7 +10,7 @@ Sessions are stored in cookies, so server-rendered pages know who is signed in.
 | `lib/supabase/server.ts`              | Server client for Server Components, Server Actions, and Route Handlers                                |
 | `lib/supabase/client.ts`              | Browser client for Client Components (not used yet)                                                    |
 | `proxy.ts` + `lib/supabase/proxy.ts`  | Runs on every request. Refreshes the session cookie and redirects signed-out visitors away from protected paths |
-| `lib/auth/verified-user.ts`           | `getVerifiedUser()` / `requireVerifiedUser()`, the identity check used by pages and server code        |
+| `lib/auth/user.ts`                    | `getUser()` / `requireUser()`, the identity check used by pages and server code                        |
 | `lib/auth/redirects.ts`               | Protected path list and the safe `?next=` destination check                                            |
 | `app/(auth)/actions.ts`               | Sign-in and registration server actions                                                                |
 | `app/auth/confirm/route.ts`           | Completes email confirmation links                                                                     |
@@ -23,7 +23,7 @@ Protected routes are `/directory`, `/people/[id]`, and `/profile/edit`.
   Server code never authorizes from `getSession()`, because it returns
   whatever the cookie contains.
 - **Pages check again.** The proxy redirect is a convenience. Each protected
-  page and any future server action calls `requireVerifiedUser()` itself, and
+  page and server action checks the user itself (`requireUser()` or `getUser()`), and
   database access is still limited by Row Level Security.
 - **Safe destinations.** A signed-out visitor to a protected page is sent to
   `/sign-in?next=<original path>` and returned there after signing in or
@@ -82,9 +82,10 @@ wait, or configure custom SMTP under **Authentication → Emails → SMTP Settin
 1. Visit `/directory` while signed out. You're redirected to
    `/sign-in?next=%2Fdirectory`.
 2. Register with a new email.
-   - With confirmation on: a success message asks you to check your email.
-     Click the link and you land on `/directory`, signed in.
-   - With confirmation off: you're redirected to `/directory` right away.
+   - With confirmation on: a "Check your inbox" message appears. Open the link
+     in the same browser and you land on **Set up your profile**, signed in.
+   - With confirmation off: you go straight to **Set up your profile**.
+   - Until a profile is saved, `/directory` sends you back to profile setup.
 3. Submit the forms with an invalid email, a short password, and mismatched
    passwords. Each field shows its own error, and screen readers announce the
    summary.
@@ -94,7 +95,7 @@ wait, or configure custom SMTP under **Authentication → Emails → SMTP Settin
    `/people/some-id`.
 6. Try `/sign-in?next=https://example.com`. After signing in you land on
    `/directory`, not the external site.
-7. Click **Sign out**. You return to the home page, and `/directory` redirects
-   to sign-in again.
+7. Click **Sign out**. The sign-in page says "You've been signed out.", and
+   `/directory` redirects to sign-in again.
 8. Open an old or already-used confirmation link. You see "That confirmation
    link is invalid or has expired."

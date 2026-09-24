@@ -1,25 +1,25 @@
-import type { SupabaseServerClient } from "@/lib/supabase/server";
+import type { ServerClient } from "@/lib/supabase/server";
 
-const MAX_NAME_QUERY_LENGTH = 100;
+const MAX_QUERY_LENGTH = 100;
 const BIO_PREVIEW_LENGTH = 160;
 
-export type DirectoryFilters = {
-  nameQuery: string;
+export type Filters = {
+  query: string;
   department: string;
 };
 
-// Only what a card displays. The id is needed for the profile link and is
-// never rendered; emails live in auth.users and are never queried here.
-export type DirectoryCardProfile = {
+// Only what a card shows. The id is used for the profile link and never
+// rendered; emails live in auth.users and are never queried here.
+export type CardProfile = {
   id: string;
   fullName: string;
   jobTitle: string | null;
   department: string | null;
   location: string | null;
-  bioPreview: string | null;
+  bio: string | null;
 };
 
-type DirectoryProfileRow = {
+type CardRow = {
   id: string;
   full_name: string;
   job_title: string | null;
@@ -28,34 +28,52 @@ type DirectoryProfileRow = {
   bio: string | null;
 };
 
-function readFirstSearchParam(value: string | string[] | undefined) {
+function first(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? "";
 }
 
-export function parseDirectoryFilters(
-  searchParams: Record<string, string | string[] | undefined>,
-): DirectoryFilters {
+export function parseFilters(params: Record<string, string | string[] | undefined>): Filters {
   return {
-    nameQuery: readFirstSearchParam(searchParams.q).trim().slice(0, MAX_NAME_QUERY_LENGTH),
-    department: readFirstSearchParam(searchParams.department).trim(),
+    query: first(params.q).trim().slice(0, MAX_QUERY_LENGTH),
+    department: first(params.department).trim(),
   };
 }
 
-// Stops a search for "%" or "_" from acting as a wildcard.
-function escapeLikePattern(searchText: string) {
-  return searchText.replace(/[\\%_]/g, (character) => `\\${character}`);
+export function directoryHref({ query, department }: Filters) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (department) params.set("department", department);
+  const search = params.toString();
+  return search ? `/directory?${search}` : "/directory";
 }
 
-function buildBioPreview(bio: string | null) {
+// Makes % and _ match literally instead of acting as wildcards.
+function escapeLike(text: string) {
+  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function shortBio(bio: string | null) {
   if (!bio) return null;
-  const collapsedBio = bio.replace(/\s+/g, " ").trim();
-  if (collapsedBio.length <= BIO_PREVIEW_LENGTH) return collapsedBio;
-  const clippedBio = collapsedBio.slice(0, BIO_PREVIEW_LENGTH);
-  const lastSpaceIndex = clippedBio.lastIndexOf(" ");
-  return `${clippedBio.slice(0, lastSpaceIndex > 0 ? lastSpaceIndex : BIO_PREVIEW_LENGTH)}…`;
+  const text = bio.replace(/\s+/g, " ").trim();
+  if (text.length <= BIO_PREVIEW_LENGTH) return text;
+  const cut = text.slice(0, BIO_PREVIEW_LENGTH);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${cut.slice(0, lastSpace > 0 ? lastSpace : BIO_PREVIEW_LENGTH)}…`;
 }
 
-export async function fetchDirectoryDepartments(supabase: SupabaseServerClient) {
+export async function hasProfile(supabase: ServerClient, userId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error("Couldn't check your profile.");
+  }
+  return Boolean(data);
+}
+
+export async function getDepartments(supabase: ServerClient) {
   const { data, error } = await supabase
     .from("profiles")
     .select("department")
@@ -63,46 +81,40 @@ export async function fetchDirectoryDepartments(supabase: SupabaseServerClient) 
     .overrideTypes<{ department: string }[], { merge: false }>();
 
   if (error) {
-    return { departments: [], loadFailed: true };
+    return { departments: [], failed: true };
   }
 
-  const departments = Array.from(
-    new Set(data.map((row) => row.department.trim()).filter(Boolean)),
-  ).sort((first, second) => first.localeCompare(second));
-  return { departments, loadFailed: false };
+  const departments = Array.from(new Set(data.map((row) => row.department.trim()).filter(Boolean)));
+  departments.sort((a, b) => a.localeCompare(b));
+  return { departments, failed: false };
 }
 
-export async function fetchDirectoryProfiles(
-  supabase: SupabaseServerClient,
-  { nameQuery, department }: DirectoryFilters,
-) {
-  let profilesQuery = supabase
-    .from("profiles")
-    .select("id, full_name, job_title, department, location, bio");
+export async function getProfiles(supabase: ServerClient, { query, department }: Filters) {
+  let request = supabase.from("profiles").select("id, full_name, job_title, department, location, bio");
 
-  if (nameQuery) {
-    profilesQuery = profilesQuery.ilike("full_name", `%${escapeLikePattern(nameQuery)}%`);
+  if (query) {
+    request = request.ilike("full_name", `%${escapeLike(query)}%`);
   }
   if (department) {
-    profilesQuery = profilesQuery.eq("department", department);
+    request = request.eq("department", department);
   }
 
-  // A stable order so results don't shuffle between requests.
-  const { data, error } = await profilesQuery
+  // Stable order so results don't shuffle between requests.
+  const { data, error } = await request
     .order("full_name", { ascending: true })
-    .overrideTypes<DirectoryProfileRow[], { merge: false }>();
+    .overrideTypes<CardRow[], { merge: false }>();
 
   if (error) {
-    return { profiles: null, loadFailed: true };
+    return { profiles: null, failed: true };
   }
 
-  const profiles: DirectoryCardProfile[] = data.map((row) => ({
+  const profiles: CardProfile[] = data.map((row) => ({
     id: row.id,
     fullName: row.full_name,
     jobTitle: row.job_title,
     department: row.department,
     location: row.location,
-    bioPreview: buildBioPreview(row.bio),
+    bio: shortBio(row.bio),
   }));
-  return { profiles, loadFailed: false };
+  return { profiles, failed: false };
 }

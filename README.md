@@ -69,7 +69,7 @@ app/
   (auth)/             Sign-in and registration pages and server actions
   (protected)/        Signed-in pages: /directory, /people/[id], /profile/edit
   auth/confirm/       Email confirmation link handler
-components/           Shared form components
+components/           Shared form fields, status messages, and button/link styles
 lib/
   auth/               Verified-user checks and safe redirect helpers
   supabase/           Server, browser, and proxy Supabase clients

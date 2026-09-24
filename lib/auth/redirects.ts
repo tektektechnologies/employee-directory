@@ -1,34 +1,26 @@
-export const DEFAULT_SIGNED_IN_PATH = "/directory";
+export const DEFAULT_PATH = "/directory";
 
-const PROTECTED_PATH_PREFIXES = ["/directory", "/people", "/profile/edit"];
+const PROTECTED_PATHS = ["/directory", "/people", "/profile/edit"];
 
 export function isProtectedPath(pathname: string) {
-  return PROTECTED_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return PROTECTED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
-// Only same-origin relative paths are allowed, so a crafted ?next= value can't
-// send users to another site after they sign in.
-export function getSafeRedirectPath(candidate: unknown) {
-  if (
-    typeof candidate !== "string" ||
-    !candidate.startsWith("/") ||
-    candidate.startsWith("//") ||
-    candidate.includes("\\")
-  ) {
-    return DEFAULT_SIGNED_IN_PATH;
+// Only same-site paths are allowed, so a crafted ?next= can't send users to
+// another site after they sign in.
+export function safeNextPath(next: unknown) {
+  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return DEFAULT_PATH;
   }
 
-  const internalOrigin = "http://internal.invalid";
-  const parsedUrl = new URL(candidate, internalOrigin);
-  if (parsedUrl.origin !== internalOrigin) {
-    return DEFAULT_SIGNED_IN_PATH;
+  const base = "http://internal.invalid";
+  const url = new URL(next, base);
+  if (url.origin !== base) {
+    return DEFAULT_PATH;
   }
-
-  return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+  return url.pathname + url.search + url.hash;
 }
 
-export function buildSignInPath(destinationPath: string) {
-  return `/sign-in?next=${encodeURIComponent(destinationPath)}`;
+export function signInPath(next: string) {
+  return `/sign-in?next=${encodeURIComponent(next)}`;
 }

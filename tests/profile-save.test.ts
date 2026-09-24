@@ -1,41 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createFakeSupabase,
-  findCall,
-  isWriteQuery,
-  type FakeQueryResult,
-  type RecordedQuery,
-} from "./support/fake-supabase";
+import { fakeSupabase, findCall, isWrite, type Query, type QueryResult } from "./support/fake-supabase";
 
-const SIGNED_IN_USER_ID = "11111111-1111-4111-8111-111111111111";
-const OTHER_USER_ID = "22222222-2222-4222-8222-222222222222";
+const MY_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_ID = "22222222-2222-4222-8222-222222222222";
 
-const sessionState = vi.hoisted(() => ({
+const session = vi.hoisted(() => ({
   user: null as { id: string; email: string | null } | null,
-  resolveQuery: (() => ({ data: null, error: null })) as (query: RecordedQuery) => FakeQueryResult,
-  recordedQueries: [] as RecordedQuery[],
+  respond: (() => ({ data: null, error: null })) as (query: Query) => QueryResult,
+  queries: [] as Query[],
 }));
 
-vi.mock("@/lib/auth/verified-user", () => ({
-  getVerifiedUser: async () => {
-    const fakeSupabase = createFakeSupabase((query) => sessionState.resolveQuery(query));
-    sessionState.recordedQueries = fakeSupabase.recordedQueries;
-    return { supabase: fakeSupabase.client, user: sessionState.user };
+vi.mock("@/lib/auth/user", () => ({
+  getUser: async () => {
+    const fake = fakeSupabase((query) => session.respond(query));
+    session.queries = fake.queries;
+    return { supabase: fake.client, user: session.user };
   },
 }));
 
 vi.mock("next/navigation", () => ({
-  redirect: (destination: string) => {
-    throw new Error(`NEXT_REDIRECT:${destination}`);
+  redirect: (path: string) => {
+    throw new Error(`NEXT_REDIRECT:${path}`);
   },
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { saveOwnProfile } = await import("@/app/(protected)/profile/edit/actions");
-const { initialProfileFormState } = await import("@/app/(protected)/profile/edit/form-state");
+const { saveProfile } = await import("@/app/(protected)/profile/edit/actions");
+const { initialState } = await import("@/app/(protected)/profile/edit/form-state");
 
-function buildValidProfileForm(overrides: Record<string, string> = {}) {
+function profileForm(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const fields = {
     fullName: "Ada Lovelace",
@@ -48,112 +42,106 @@ function buildValidProfileForm(overrides: Record<string, string> = {}) {
     contactUrl: "",
     ...overrides,
   };
-  for (const [fieldName, fieldValue] of Object.entries(fields)) {
-    formData.set(fieldName, fieldValue);
+  for (const [name, value] of Object.entries(fields)) {
+    formData.set(name, value);
   }
   return formData;
 }
 
-function writeQueries() {
-  return sessionState.recordedQueries.filter(isWriteQuery);
+function writes() {
+  return session.queries.filter(isWrite);
 }
 
 beforeEach(() => {
-  sessionState.user = { id: SIGNED_IN_USER_ID, email: "ada@example.com" };
-  sessionState.recordedQueries = [];
+  session.user = { id: MY_ID, email: "ada@example.com" };
+  session.queries = [];
 });
 
 describe("saving your own profile", () => {
   it("updates only the signed-in user's row when a profile already exists", async () => {
-    sessionState.resolveQuery = () => ({ data: { id: SIGNED_IN_USER_ID }, error: null });
+    session.respond = () => ({ data: { id: MY_ID }, error: null });
 
-    const result = await saveOwnProfile(initialProfileFormState, buildValidProfileForm());
+    const result = await saveProfile(initialState, profileForm());
 
     expect(result.status).toBe("success");
-    const [updateQuery] = writeQueries();
-    expect(updateQuery.table).toBe("profiles");
-    expect(findCall(updateQuery, "eq")?.args).toEqual(["id", SIGNED_IN_USER_ID]);
-    expect(findCall(updateQuery, "update")?.args[0]).toMatchObject({
+    const [update] = writes();
+    expect(update.table).toBe("profiles");
+    expect(findCall(update, "eq")?.args).toEqual(["id", MY_ID]);
+    expect(findCall(update, "update")?.args[0]).toMatchObject({
       full_name: "Ada Lovelace",
       interests: ["poetry", "mathematics"],
     });
-    expect(findCall(updateQuery, "update")?.args[0]).not.toHaveProperty("id");
+    expect(findCall(update, "update")?.args[0]).not.toHaveProperty("id");
   });
 
   it("creates the profile under the signed-in user's id on first save, then redirects", async () => {
-    sessionState.resolveQuery = () => ({ data: null, error: null });
+    session.respond = () => ({ data: null, error: null });
 
-    await expect(
-      saveOwnProfile(initialProfileFormState, buildValidProfileForm()),
-    ).rejects.toThrow("NEXT_REDIRECT:/directory?welcome=1");
+    await expect(saveProfile(initialState, profileForm())).rejects.toThrow(
+      "NEXT_REDIRECT:/directory?welcome=1",
+    );
 
-    const [insertQuery] = writeQueries();
-    expect(findCall(insertQuery, "insert")?.args[0]).toMatchObject({ id: SIGNED_IN_USER_ID });
+    const [insert] = writes();
+    expect(findCall(insert, "insert")?.args[0]).toMatchObject({ id: MY_ID });
   });
 
   it("falls back to an update instead of creating a duplicate when the row already exists", async () => {
-    sessionState.resolveQuery = (query) => {
+    session.respond = (query) => {
       if (findCall(query, "insert")) return { data: null, error: { code: "23505" } };
-      if (findCall(query, "update")) return { data: { id: SIGNED_IN_USER_ID }, error: null };
+      if (findCall(query, "update")) return { data: { id: MY_ID }, error: null };
       return { data: null, error: null };
     };
 
-    const result = await saveOwnProfile(initialProfileFormState, buildValidProfileForm());
+    const result = await saveProfile(initialState, profileForm());
 
     expect(result.status).toBe("success");
-    expect(writeQueries().map((query) => query.calls[0].method)).toEqual(["insert", "update"]);
+    expect(writes().map((query) => query.calls[0].method)).toEqual(["insert", "update"]);
   });
 });
 
 describe("editing someone else's profile", () => {
   it("ignores an owner id smuggled into the form and writes only the signed-in user's row", async () => {
-    sessionState.resolveQuery = () => ({ data: { id: SIGNED_IN_USER_ID }, error: null });
-    const tamperedForm = buildValidProfileForm({ id: OTHER_USER_ID, userId: OTHER_USER_ID });
+    session.respond = () => ({ data: { id: MY_ID }, error: null });
 
-    await saveOwnProfile(initialProfileFormState, tamperedForm);
+    await saveProfile(initialState, profileForm({ id: OTHER_ID, userId: OTHER_ID }));
 
-    const allQueryArguments = JSON.stringify(sessionState.recordedQueries);
-    expect(allQueryArguments).not.toContain(OTHER_USER_ID);
-    for (const query of sessionState.recordedQueries) {
-      expect(findCall(query, "eq")?.args).toEqual(["id", SIGNED_IN_USER_ID]);
+    expect(JSON.stringify(session.queries)).not.toContain(OTHER_ID);
+    for (const query of session.queries) {
+      expect(findCall(query, "eq")?.args).toEqual(["id", MY_ID]);
     }
   });
 
   it("reports a failure when the update matches no row (for example, blocked by RLS)", async () => {
-    sessionState.resolveQuery = (query) =>
-      findCall(query, "update")
-        ? { data: null, error: null }
-        : { data: { id: SIGNED_IN_USER_ID }, error: null };
+    session.respond = (query) =>
+      findCall(query, "update") ? { data: null, error: null } : { data: { id: MY_ID }, error: null };
 
-    const result = await saveOwnProfile(initialProfileFormState, buildValidProfileForm());
+    const result = await saveProfile(initialState, profileForm());
 
     expect(result.status).toBe("error");
     expect(result.values?.fullName).toBe("Ada Lovelace");
   });
 
   it("sends a signed-out request to sign-in without touching the database", async () => {
-    sessionState.user = null;
+    session.user = null;
 
-    await expect(
-      saveOwnProfile(initialProfileFormState, buildValidProfileForm()),
-    ).rejects.toThrow("NEXT_REDIRECT:/sign-in?next=%2Fprofile%2Fedit");
-    expect(sessionState.recordedQueries).toHaveLength(0);
+    await expect(saveProfile(initialState, profileForm())).rejects.toThrow(
+      "NEXT_REDIRECT:/sign-in?next=%2Fprofile%2Fedit",
+    );
+    expect(session.queries).toHaveLength(0);
   });
 });
 
 describe("invalid input", () => {
   it("returns field errors, keeps the entered values, and writes nothing", async () => {
-    const invalidForm = buildValidProfileForm({
-      fullName: "   ",
-      photoUrl: "javascript:alert(1)",
-    });
-
-    const result = await saveOwnProfile(initialProfileFormState, invalidForm);
+    const result = await saveProfile(
+      initialState,
+      profileForm({ fullName: "   ", photoUrl: "javascript:alert(1)" }),
+    );
 
     expect(result.status).toBe("error");
-    expect(result.fieldErrors).toHaveProperty("fullName");
-    expect(result.fieldErrors).toHaveProperty("photoUrl");
+    expect(result.errors).toHaveProperty("fullName");
+    expect(result.errors).toHaveProperty("photoUrl");
     expect(result.values?.photoUrl).toBe("javascript:alert(1)");
-    expect(sessionState.recordedQueries).toHaveLength(0);
+    expect(session.queries).toHaveLength(0);
   });
 });

@@ -1,33 +1,31 @@
 import { describe, expect, it } from "vitest";
-import {
-  fetchDirectoryDepartments,
-  fetchDirectoryProfiles,
-  parseDirectoryFilters,
-} from "@/lib/profiles/directory";
-import { createFakeSupabase, findCall } from "./support/fake-supabase";
+import { getDepartments, getProfiles, parseFilters, type Filters } from "@/lib/profiles/directory";
+import { fakeSupabase, findCall } from "./support/fake-supabase";
 
-describe("parseDirectoryFilters", () => {
+const noFilters: Filters = { query: "", department: "" };
+
+describe("parseFilters", () => {
   it("trims values and defaults to no filters", () => {
-    expect(parseDirectoryFilters({})).toEqual({ nameQuery: "", department: "" });
-    expect(parseDirectoryFilters({ q: "  ada ", department: " Research " })).toEqual({
-      nameQuery: "ada",
+    expect(parseFilters({})).toEqual(noFilters);
+    expect(parseFilters({ q: "  ada ", department: " Research " })).toEqual({
+      query: "ada",
       department: "Research",
     });
   });
 
   it("uses the first value when a parameter is repeated", () => {
-    expect(parseDirectoryFilters({ q: ["ada", "alan"], department: ["Research", "Ops"] })).toEqual({
-      nameQuery: "ada",
+    expect(parseFilters({ q: ["ada", "alan"], department: ["Research", "Ops"] })).toEqual({
+      query: "ada",
       department: "Research",
     });
   });
 
   it("caps the name query length", () => {
-    expect(parseDirectoryFilters({ q: "a".repeat(500) }).nameQuery).toHaveLength(100);
+    expect(parseFilters({ q: "a".repeat(500) }).query).toHaveLength(100);
   });
 });
 
-describe("fetchDirectoryProfiles", () => {
+describe("getProfiles", () => {
   const sampleRow = {
     id: "11111111-1111-4111-8111-111111111111",
     full_name: "Ada Lovelace",
@@ -37,80 +35,58 @@ describe("fetchDirectoryProfiles", () => {
     bio: "word ".repeat(60),
   };
 
-  function runDirectoryQuery(filters: { nameQuery: string; department: string }) {
-    const fakeSupabase = createFakeSupabase(() => ({ data: [sampleRow], error: null }));
-    return {
-      resultPromise: fetchDirectoryProfiles(fakeSupabase.client, filters),
-      recordedQueries: fakeSupabase.recordedQueries,
-    };
+  async function search(filters: Filters) {
+    const fake = fakeSupabase(() => ({ data: [sampleRow], error: null }));
+    const result = await getProfiles(fake.client, filters);
+    return { result, query: fake.queries[0] };
   }
 
   it("applies no filters when both are empty", async () => {
-    const { resultPromise, recordedQueries } = runDirectoryQuery({ nameQuery: "", department: "" });
-    await resultPromise;
-    expect(findCall(recordedQueries[0], "ilike")).toBeUndefined();
-    expect(findCall(recordedQueries[0], "eq")).toBeUndefined();
+    const { query } = await search(noFilters);
+    expect(findCall(query, "ilike")).toBeUndefined();
+    expect(findCall(query, "eq")).toBeUndefined();
   });
 
   it("combines name search and department with AND semantics", async () => {
-    const { resultPromise, recordedQueries } = runDirectoryQuery({
-      nameQuery: "ada",
-      department: "Research",
-    });
-    await resultPromise;
+    const { query } = await search({ query: "ada", department: "Research" });
 
-    const [directoryQuery] = recordedQueries;
-    expect(findCall(directoryQuery, "ilike")?.args).toEqual(["full_name", "%ada%"]);
-    expect(findCall(directoryQuery, "eq")?.args).toEqual(["department", "Research"]);
-    expect(findCall(directoryQuery, "or")).toBeUndefined();
-    expect(findCall(directoryQuery, "order")?.args[0]).toBe("full_name");
+    expect(findCall(query, "ilike")?.args).toEqual(["full_name", "%ada%"]);
+    expect(findCall(query, "eq")?.args).toEqual(["department", "Research"]);
+    expect(findCall(query, "or")).toBeUndefined();
+    expect(findCall(query, "order")?.args[0]).toBe("full_name");
   });
 
   it("treats % and _ in a search as literal characters", async () => {
-    const { resultPromise, recordedQueries } = runDirectoryQuery({
-      nameQuery: "50%_off\\",
-      department: "",
-    });
-    await resultPromise;
-    expect(findCall(recordedQueries[0], "ilike")?.args[1]).toBe("%50\\%\\_off\\\\%");
+    const { query } = await search({ query: "50%_off\\", department: "" });
+    expect(findCall(query, "ilike")?.args[1]).toBe("%50\\%\\_off\\\\%");
   });
 
   it("selects only card fields and never email", async () => {
-    const { resultPromise, recordedQueries } = runDirectoryQuery({ nameQuery: "", department: "" });
-    await resultPromise;
-    const selectedColumns = String(findCall(recordedQueries[0], "select")?.args[0]);
-    expect(selectedColumns).not.toMatch(/email|\*/);
+    const { query } = await search(noFilters);
+    expect(String(findCall(query, "select")?.args[0])).not.toMatch(/email|\*/);
   });
 
-  it("maps rows to cards with a shortened bio preview", async () => {
-    const { resultPromise } = runDirectoryQuery({ nameQuery: "", department: "" });
-    const { profiles, loadFailed } = await resultPromise;
+  it("maps rows to cards with a shortened bio", async () => {
+    const { result } = await search(noFilters);
 
-    expect(loadFailed).toBe(false);
-    expect(profiles?.[0]).toMatchObject({ fullName: "Ada Lovelace", department: "Research" });
-    expect(profiles?.[0].bioPreview?.length).toBeLessThanOrEqual(161);
-    expect(profiles?.[0].bioPreview?.endsWith("…")).toBe(true);
+    expect(result.failed).toBe(false);
+    expect(result.profiles?.[0]).toMatchObject({ fullName: "Ada Lovelace", department: "Research" });
+    expect(result.profiles?.[0].bio?.length).toBeLessThanOrEqual(161);
+    expect(result.profiles?.[0].bio?.endsWith("…")).toBe(true);
   });
 
   it("reports a load failure distinctly from an empty result", async () => {
-    const failingSupabase = createFakeSupabase(() => ({ data: null, error: { message: "boom" } }));
-    const emptySupabase = createFakeSupabase(() => ({ data: [], error: null }));
-    const noFilters = { nameQuery: "", department: "" };
+    const failing = fakeSupabase(() => ({ data: null, error: { message: "boom" } }));
+    const empty = fakeSupabase(() => ({ data: [], error: null }));
 
-    expect(await fetchDirectoryProfiles(failingSupabase.client, noFilters)).toEqual({
-      profiles: null,
-      loadFailed: true,
-    });
-    expect(await fetchDirectoryProfiles(emptySupabase.client, noFilters)).toEqual({
-      profiles: [],
-      loadFailed: false,
-    });
+    expect(await getProfiles(failing.client, noFilters)).toEqual({ profiles: null, failed: true });
+    expect(await getProfiles(empty.client, noFilters)).toEqual({ profiles: [], failed: false });
   });
 });
 
-describe("fetchDirectoryDepartments", () => {
+describe("getDepartments", () => {
   it("returns unique, trimmed, alphabetized department names", async () => {
-    const fakeSupabase = createFakeSupabase(() => ({
+    const fake = fakeSupabase(() => ({
       data: [
         { department: "Research" },
         { department: " Operations " },
@@ -120,9 +96,9 @@ describe("fetchDirectoryDepartments", () => {
       error: null,
     }));
 
-    expect(await fetchDirectoryDepartments(fakeSupabase.client)).toEqual({
+    expect(await getDepartments(fake.client)).toEqual({
       departments: ["Operations", "Research"],
-      loadFailed: false,
+      failed: false,
     });
   });
 });

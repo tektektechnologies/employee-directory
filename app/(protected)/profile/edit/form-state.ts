@@ -1,10 +1,10 @@
-import type { ProfileFieldName, ProfileFormValues } from "@/lib/profiles/profile-fields";
+import type { ProfileField, ProfileValues } from "@/lib/profiles/fields";
 
-export type ProfileFormState = {
+export type ProfileState = {
   status: "idle" | "error" | "success";
   message?: string;
-  fieldErrors?: Partial<Record<ProfileFieldName, string>>;
-  values?: ProfileFormValues;
+  errors?: Partial<Record<ProfileField, string>>;
+  values?: ProfileValues;
 };
 
-export const initialProfileFormState: ProfileFormState = { status: "idle" };
+export const initialState: ProfileState = { status: "idle" };

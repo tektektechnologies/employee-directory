@@ -2,87 +2,80 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { buildSignInPath } from "@/lib/auth/redirects";
-import { getVerifiedUser } from "@/lib/auth/verified-user";
-import { parseProfileForm } from "@/lib/profiles/profile-fields";
-import type { ProfileFormState } from "./form-state";
+import { signInPath } from "@/lib/auth/redirects";
+import { getUser } from "@/lib/auth/user";
+import { validateProfile } from "@/lib/profiles/fields";
+import type { ProfileState } from "./form-state";
 
 const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
 
-export async function saveOwnProfile(
-  _previousState: ProfileFormState,
-  formData: FormData,
-): Promise<ProfileFormState> {
-  // The owner is always the verified user; the form has no id field, and any
-  // id a client sends is ignored.
-  const { supabase, user } = await getVerifiedUser();
+export async function saveProfile(_prev: ProfileState, formData: FormData): Promise<ProfileState> {
+  // The owner is always the signed-in user. The form has no id field, and any
+  // id a client adds is ignored.
+  const { supabase, user } = await getUser();
   if (!user) {
-    redirect(buildSignInPath("/profile/edit"));
+    redirect(signInPath("/profile/edit"));
   }
 
-  const { values, fieldErrors, profileRow } = parseProfileForm(formData);
-  if (!profileRow) {
+  const { values, errors, row } = validateProfile(formData);
+  if (!row) {
+    const count = Object.keys(errors).length;
     return {
       status: "error",
-      message: "Some fields need attention. Fix the highlighted fields and save again.",
-      fieldErrors,
+      message: count === 1 ? "One field needs your attention." : `${count} fields need your attention.`,
+      errors,
       values,
     };
   }
 
-  const saveFailedState: ProfileFormState = {
+  const failed = (code?: string): ProfileState => ({
     status: "error",
-    message: "Your profile couldn't be saved. Please try again.",
+    message:
+      code === CHECK_VIOLATION
+        ? "Some values weren't accepted. Check your entries and try again."
+        : "Your profile couldn't be saved. Your changes are still here, so please try again.",
     values,
-  };
+  });
 
-  const { data: existingProfile, error: lookupError } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from("profiles")
     .select("id")
     .eq("id", user.id)
     .maybeSingle();
   if (lookupError) {
-    return saveFailedState;
+    return failed();
   }
 
-  let isFirstSave = !existingProfile;
+  let isNew = !existing;
 
-  if (isFirstSave) {
-    const { error: insertError } = await supabase
-      .from("profiles")
-      .insert({ id: user.id, ...profileRow });
-
-    // A duplicate submission already created the row, so treat this as an edit.
-    if (insertError?.code === UNIQUE_VIOLATION) {
-      isFirstSave = false;
-    } else if (insertError) {
-      return insertError.code === CHECK_VIOLATION
-        ? { ...saveFailedState, message: "Some values weren't accepted. Check your entries and try again." }
-        : saveFailedState;
+  if (isNew) {
+    const { error } = await supabase.from("profiles").insert({ id: user.id, ...row });
+    // A double submit already created the row, so save this as an edit.
+    if (error?.code === UNIQUE_VIOLATION) {
+      isNew = false;
+    } else if (error) {
+      return failed(error.code);
     }
   }
 
-  if (!isFirstSave) {
-    const { data: updatedProfile, error: updateError } = await supabase
+  if (!isNew) {
+    const { data: updated, error } = await supabase
       .from("profiles")
-      .update(profileRow)
+      .update(row)
       .eq("id", user.id)
       .select("id")
       .maybeSingle();
-    if (updateError || !updatedProfile) {
-      return updateError?.code === CHECK_VIOLATION
-        ? { ...saveFailedState, message: "Some values weren't accepted. Check your entries and try again." }
-        : saveFailedState;
+    if (error || !updated) {
+      return failed(error?.code);
     }
   }
 
-  revalidatePath("/directory");
-  revalidatePath(`/people/${user.id}`);
+  revalidatePath("/", "layout");
 
-  if (isFirstSave) {
+  if (isNew) {
     redirect("/directory?welcome=1");
   }
 
-  return { status: "success", message: "Your profile has been saved.", values };
+  return { status: "success", message: "Your changes are saved.", values };
 }

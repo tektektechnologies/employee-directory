@@ -1,53 +1,45 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { buildSignInPath, isProtectedPath } from "@/lib/auth/redirects";
-import { getSupabaseConfig } from "./config";
+import { isProtectedPath, signInPath } from "@/lib/auth/redirects";
+import { getSupabaseEnv } from "./config";
 
-const CACHE_HEADER_NAMES = ["cache-control", "expires", "pragma"];
+const CACHE_HEADERS = ["cache-control", "expires", "pragma"];
 
-export async function refreshSessionAndGuardRoutes(request: NextRequest) {
-  const { supabaseUrl, supabasePublishableKey } = getSupabaseConfig();
-  let sessionResponse = NextResponse.next({ request });
+export async function updateSession(request: NextRequest) {
+  const { url, key } = getSupabaseEnv();
+  let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
+  const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet, cacheHeaders) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value),
-        );
-        sessionResponse = NextResponse.next({ request });
+      setAll(cookiesToSet, headers) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          sessionResponse.cookies.set(name, value, options),
+          response.cookies.set(name, value, options),
         );
-        Object.entries(cacheHeaders).forEach(([headerName, headerValue]) =>
-          sessionResponse.headers.set(headerName, headerValue),
-        );
+        Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
       },
     },
   });
 
-  // Must run before any response is returned: it refreshes an expiring token
-  // and verifies the token's signature.
+  // Refreshes an expiring token and verifies its signature. Must run before
+  // any response is returned.
   const { data } = await supabase.auth.getClaims();
-  const isSignedIn = Boolean(data?.claims?.sub);
+  const signedIn = Boolean(data?.claims?.sub);
 
   const { pathname, search } = request.nextUrl;
-  if (isSignedIn || !isProtectedPath(pathname)) {
-    return sessionResponse;
+  if (signedIn || !isProtectedPath(pathname)) {
+    return response;
   }
 
-  const redirectResponse = NextResponse.redirect(
-    new URL(buildSignInPath(`${pathname}${search}`), request.url),
-  );
-  sessionResponse.cookies
-    .getAll()
-    .forEach((sessionCookie) => redirectResponse.cookies.set(sessionCookie));
-  for (const headerName of CACHE_HEADER_NAMES) {
-    const headerValue = sessionResponse.headers.get(headerName);
-    if (headerValue) redirectResponse.headers.set(headerName, headerValue);
+  const redirect = NextResponse.redirect(new URL(signInPath(pathname + search), request.url));
+  response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+  for (const name of CACHE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value) redirect.headers.set(name, value);
   }
-  return redirectResponse;
+  return redirect;
 }

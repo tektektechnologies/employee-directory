@@ -1,137 +1,150 @@
 "use client";
 
-import { useActionState } from "react";
-import { FormField, TextAreaField } from "@/components/form-field";
-import { FormStatusMessage } from "@/components/form-status-message";
-import { PROFILE_LIMITS, type ProfileFormValues } from "@/lib/profiles/profile-fields";
-import { saveOwnProfile } from "./actions";
-import { initialProfileFormState } from "./form-state";
+import Link from "next/link";
+import { useActionState, useRef } from "react";
+import { Field, TextArea } from "@/components/field";
+import { StatusMessage } from "@/components/status-message";
+import { primaryButton, secondaryButton, textLink } from "@/components/styles";
+import { useFocusResult } from "@/components/use-focus-result";
+import { LIMITS, type ProfileValues } from "@/lib/profiles/fields";
+import { saveProfile } from "./actions";
+import { initialState } from "./form-state";
 
 type ProfileFormProps = {
-  savedValues: ProfileFormValues;
-  isFirstSave: boolean;
+  saved: ProfileValues;
+  isNew: boolean;
+  profileHref: string;
 };
 
-export function ProfileForm({ savedValues, isFirstSave }: ProfileFormProps) {
-  const [formState, submitProfile, isSaving] = useActionState(
-    saveOwnProfile,
-    initialProfileFormState,
-  );
-  const fieldValues = formState.values ?? savedValues;
-  const fieldErrors = formState.fieldErrors ?? {};
+export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
+  const [state, formAction, pending] = useActionState(saveProfile, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  useFocusResult(formRef, messageRef, state);
+
+  const values = state.values ?? saved;
+  const errors = state.errors ?? {};
 
   return (
-    <form action={submitProfile} noValidate className="flex flex-col gap-6">
-      {formState.message && formState.status !== "idle" && (
-        <FormStatusMessage
-          tone={formState.status === "success" ? "success" : "error"}
-          message={formState.message}
-        />
+    <form ref={formRef} action={formAction} noValidate className="flex flex-col gap-6">
+      {state.status === "error" && (
+        <StatusMessage ref={messageRef} tone="error">
+          {state.message}
+        </StatusMessage>
+      )}
+      {state.status === "success" && (
+        <StatusMessage ref={messageRef} tone="success">
+          {state.message}{" "}
+          <Link href={profileHref} className={textLink}>
+            View your profile
+          </Link>
+        </StatusMessage>
       )}
 
       <fieldset className="grid gap-5 sm:grid-cols-2">
         <legend className="mb-4 text-base font-semibold text-stone-900">About you</legend>
         <div className="sm:col-span-2">
-          <FormField
+          <Field
             name="fullName"
             label="Full name"
             type="text"
             autoComplete="name"
-            maxLength={PROFILE_LIMITS.fullName}
-            defaultValue={fieldValues.fullName}
-            errorMessage={fieldErrors.fullName}
+            maxLength={LIMITS.fullName}
+            defaultValue={values.fullName}
+            error={errors.fullName}
           />
         </div>
-        <FormField
+        <Field
           name="jobTitle"
           label="Role"
           type="text"
           autoComplete="organization-title"
-          maxLength={PROFILE_LIMITS.jobTitle}
+          maxLength={LIMITS.jobTitle}
           hint="For example, Data Scientist."
-          defaultValue={fieldValues.jobTitle}
-          errorMessage={fieldErrors.jobTitle}
+          defaultValue={values.jobTitle}
+          error={errors.jobTitle}
         />
-        <FormField
+        <Field
           name="department"
           label="Department"
           type="text"
           autoComplete="off"
-          maxLength={PROFILE_LIMITS.department}
+          maxLength={LIMITS.department}
           hint="For example, Applied Research."
-          defaultValue={fieldValues.department}
-          errorMessage={fieldErrors.department}
+          defaultValue={values.department}
+          error={errors.department}
         />
         <div className="sm:col-span-2">
-          <FormField
+          <Field
             name="location"
             label="Location"
             type="text"
             autoComplete="address-level2"
-            maxLength={PROFILE_LIMITS.location}
+            maxLength={LIMITS.location}
             hint="City or office, for example Boston or Remote."
-            defaultValue={fieldValues.location}
-            errorMessage={fieldErrors.location}
+            defaultValue={values.location}
+            error={errors.location}
           />
         </div>
         <div className="sm:col-span-2">
-          <TextAreaField
+          <TextArea
             name="bio"
             label="Bio"
-            maxLength={PROFILE_LIMITS.bio}
-            hint={`What you work on and how colleagues can help. Up to ${PROFILE_LIMITS.bio} characters.`}
-            defaultValue={fieldValues.bio}
-            errorMessage={fieldErrors.bio}
+            maxLength={LIMITS.bio}
+            hint={`What you work on and how colleagues can help. Up to ${LIMITS.bio} characters.`}
+            defaultValue={values.bio}
+            error={errors.bio}
           />
         </div>
         <div className="sm:col-span-2">
-          <FormField
+          <Field
             name="interests"
             label="Interests"
             type="text"
             autoComplete="off"
-            hint={`Separate with commas, for example: topology, cycling, chess. Up to ${PROFILE_LIMITS.interestCount}.`}
-            defaultValue={fieldValues.interests}
-            errorMessage={fieldErrors.interests}
+            hint={`Separate with commas, for example: topology, cycling, chess. Up to ${LIMITS.interestCount}.`}
+            defaultValue={values.interests}
+            error={errors.interests}
           />
         </div>
       </fieldset>
 
       <fieldset className="grid gap-5 border-t border-stone-200 pt-6 sm:grid-cols-2">
         <legend className="mb-4 text-base font-semibold text-stone-900">Links</legend>
-        <FormField
+        <Field
           name="photoUrl"
           label="Photo URL"
           type="url"
           inputMode="url"
           autoComplete="photo"
           required={false}
-          maxLength={PROFILE_LIMITS.url}
-          hint="A link to an image, starting with https://."
-          defaultValue={fieldValues.photoUrl}
-          errorMessage={fieldErrors.photoUrl}
+          maxLength={LIMITS.url}
+          hint="Link to an image, starting with https://"
+          defaultValue={values.photoUrl}
+          error={errors.photoUrl}
         />
-        <FormField
+        <Field
           name="contactUrl"
           label="Contact link"
           type="text"
           inputMode="url"
           autoComplete="url"
           required={false}
-          maxLength={PROFILE_LIMITS.url}
-          hint="An https:// link or mailto:you@example.com."
-          defaultValue={fieldValues.contactUrl}
-          errorMessage={fieldErrors.contactUrl}
+          maxLength={LIMITS.url}
+          hint="An https:// link, or mailto:you@example.com"
+          defaultValue={values.contactUrl}
+          error={errors.contactUrl}
         />
       </fieldset>
 
       <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-6 sm:flex-row sm:items-center sm:justify-end">
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="rounded-md bg-stone-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSaving ? "Saving…" : isFirstSave ? "Save and continue" : "Save changes"}
+        {!isNew && (
+          <Link href={profileHref} className={secondaryButton}>
+            Cancel
+          </Link>
+        )}
+        <button type="submit" disabled={pending} className={`${primaryButton} px-5`}>
+          {pending ? "Saving…" : isNew ? "Save and open directory" : "Save changes"}
         </button>
       </div>
     </form>

@@ -7,31 +7,32 @@ type ProfilePhotoProps = {
   fullName: string;
 };
 
-function getInitials(fullName: string) {
-  const nameParts = fullName.trim().split(/\s+/);
-  const firstInitial = nameParts[0]?.[0] ?? "";
-  const lastInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "";
-  return `${firstInitial}${lastInitial}`.toUpperCase();
+function initials(fullName: string) {
+  const parts = fullName.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return `${first}${last}`.toUpperCase();
 }
 
-export function ProfilePhoto({ photoUrl, fullName }: ProfilePhotoProps) {
-  const [photoFailedToLoad, setPhotoFailedToLoad] = useState(false);
-  const frameClassName =
-    "size-24 shrink-0 overflow-hidden rounded-full border border-stone-200 bg-stone-100 sm:size-28";
+const frameClass =
+  "size-24 shrink-0 overflow-hidden rounded-full border border-stone-200 bg-stone-100 sm:size-28";
 
-  if (!photoUrl || photoFailedToLoad) {
+export function ProfilePhoto({ photoUrl, fullName }: ProfilePhotoProps) {
+  const [failed, setFailed] = useState(false);
+
+  if (!photoUrl || failed) {
     return (
       <div
         aria-hidden="true"
-        className={`${frameClassName} flex items-center justify-center text-2xl font-semibold text-stone-500`}
+        className={`${frameClass} flex items-center justify-center text-2xl font-semibold text-stone-500`}
       >
-        {getInitials(fullName)}
+        {initials(fullName)}
       </div>
     );
   }
 
   return (
-    <div className={frameClassName}>
+    <div className={frameClass}>
       {/* next/image would need every user-supplied host allow-listed in next.config. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -40,7 +41,7 @@ export function ProfilePhoto({ photoUrl, fullName }: ProfilePhotoProps) {
         referrerPolicy="no-referrer"
         loading="lazy"
         decoding="async"
-        onError={() => setPhotoFailedToLoad(true)}
+        onError={() => setFailed(true)}
         className="size-full object-cover"
       />
     </div>

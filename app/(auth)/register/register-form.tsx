@@ -1,83 +1,89 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { FormField } from "@/components/form-field";
-import { FormStatusMessage } from "@/components/form-status-message";
-import { registerWithPassword } from "../actions";
-import { initialAuthFormState } from "../form-state";
+import { useActionState, useRef } from "react";
+import { Field } from "@/components/field";
+import { StatusMessage } from "@/components/status-message";
+import { primaryButton, textLink } from "@/components/styles";
+import { useFocusResult } from "@/components/use-focus-result";
+import { register } from "../actions";
+import { initialState } from "../form-state";
 
 type RegisterFormProps = {
-  redirectPath: string;
+  next: string;
 };
 
-export function RegisterForm({ redirectPath }: RegisterFormProps) {
-  const [formState, submitRegistration, isSubmitting] = useActionState(
-    registerWithPassword,
-    initialAuthFormState,
-  );
+export function RegisterForm({ next }: RegisterFormProps) {
+  const [state, formAction, pending] = useActionState(register, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  useFocusResult(formRef, messageRef, state);
 
-  if (formState.status === "success" && formState.message) {
+  const signInHref = `/sign-in?next=${encodeURIComponent(next)}`;
+
+  if (state.status === "success") {
     return (
       <div className="flex flex-col gap-5">
-        <FormStatusMessage tone="success" message={formState.message} />
-        <Link
-          href={`/sign-in?next=${encodeURIComponent(redirectPath)}`}
-          className="text-center text-sm font-medium text-indigo-700 underline-offset-2 hover:underline"
-        >
-          Back to sign in
+        <StatusMessage ref={messageRef} tone="success">
+          <p className="font-medium">Check your inbox</p>
+          <p className="mt-1">
+            We sent a confirmation link to <strong>{state.email}</strong>. Open it in this browser
+            to finish signing up. You&apos;ll then set up your profile.
+          </p>
+        </StatusMessage>
+        <p className="text-sm text-stone-600">
+          No email after a few minutes? Check your spam folder, or make sure the address above is
+          right and register again.
+        </p>
+        <Link href={signInHref} className={`${textLink} self-start text-sm`}>
+          Go to sign in
         </Link>
       </div>
     );
   }
 
   return (
-    <form action={submitRegistration} noValidate className="flex flex-col gap-5">
-      <input type="hidden" name="next" value={redirectPath} />
+    <form ref={formRef} action={formAction} noValidate className="flex flex-col gap-5">
+      <input type="hidden" name="next" value={next} />
 
-      {formState.status === "error" && formState.message && (
-        <FormStatusMessage tone="error" message={formState.message} />
+      {state.status === "error" && state.message && (
+        <StatusMessage ref={messageRef} tone="error">
+          {state.message}
+        </StatusMessage>
       )}
 
-      <FormField
+      <Field
         name="email"
-        label="Work email"
+        label="Email"
         type="email"
         autoComplete="email"
-        defaultValue={formState.submittedEmail}
-        errorMessage={formState.fieldErrors?.email}
+        defaultValue={state.email}
+        error={state.errors?.email}
       />
-      <FormField
+      <Field
         name="password"
         label="Password"
         type="password"
         autoComplete="new-password"
         minLength={8}
         hint="At least 8 characters."
-        errorMessage={formState.fieldErrors?.password}
+        error={state.errors?.password}
       />
-      <FormField
+      <Field
         name="confirmPassword"
         label="Confirm password"
         type="password"
         autoComplete="new-password"
-        errorMessage={formState.fieldErrors?.confirmPassword}
+        error={state.errors?.confirmPassword}
       />
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-stone-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isSubmitting ? "Creating account…" : "Create account"}
+      <button type="submit" disabled={pending} className={primaryButton}>
+        {pending ? "Creating account…" : "Create account"}
       </button>
 
       <p className="text-center text-sm text-stone-600">
-        Already registered?{" "}
-        <Link
-          href={`/sign-in?next=${encodeURIComponent(redirectPath)}`}
-          className="font-medium text-indigo-700 underline-offset-2 hover:underline"
-        >
+        Already have an account?{" "}
+        <Link href={signInHref} className={textLink}>
           Sign in
         </Link>
       </p>

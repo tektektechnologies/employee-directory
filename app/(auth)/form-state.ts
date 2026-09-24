@@ -1,10 +1,10 @@
-export type AuthFieldName = "email" | "password" | "confirmPassword";
+export type AuthField = "email" | "password" | "confirmPassword";
 
-export type AuthFormState = {
+export type AuthState = {
   status: "idle" | "error" | "success";
   message?: string;
-  fieldErrors?: Partial<Record<AuthFieldName, string>>;
-  submittedEmail?: string;
+  errors?: Partial<Record<AuthField, string>>;
+  email?: string;
 };
 
-export const initialAuthFormState: AuthFormState = { status: "idle" };
+export const initialState: AuthState = { status: "idle" };

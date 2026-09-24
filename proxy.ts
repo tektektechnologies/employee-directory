@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
-import { refreshSessionAndGuardRoutes } from "@/lib/supabase/proxy";
+import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
-  return refreshSessionAndGuardRoutes(request);
+  return updateSession(request);
 }
 
 export const config = {
