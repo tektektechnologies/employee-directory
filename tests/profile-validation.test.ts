@@ -6,7 +6,7 @@ function profileForm(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const fields = {
     fullName: "Ada Lovelace",
-    department: "Applied Research",
+    department: "Analysis",
     jobTitle: "Analyst",
     location: "London",
     bio: "Works on analytical engines.",
@@ -39,6 +39,13 @@ describe("validateProfile", () => {
     const { errors, row } = validateProfile(profileForm({ [field]: "   " }));
     expect(row).toBeNull();
     expect(errors).toHaveProperty(field);
+  });
+
+  it("accepts only departments from the list", () => {
+    expect(validateProfile(profileForm({ department: "Logic and Foundations of Mathematics" })).row).not.toBeNull();
+    for (const department of ["Applied Research", "algebra", "Algebra and Geometry"]) {
+      expect(validateProfile(profileForm({ department })).errors).toHaveProperty("department");
+    }
   });
 
   it("rejects values longer than the database allows", () => {

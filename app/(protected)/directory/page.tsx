@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { StatusMessage } from "@/components/status-message";
 import { textLink } from "@/components/styles";
 import { requireUser } from "@/lib/auth/user";
-import { getDepartments, hasProfile, parseFilters } from "@/lib/profiles/directory";
+import { hasProfile, parseFilters } from "@/lib/profiles/directory";
 import { FilterForm } from "./filter-form";
 import { Results } from "./results";
 import { ResultsSkeleton } from "./results-skeleton";
@@ -21,7 +21,6 @@ export default async function DirectoryPage({ searchParams }: PageProps<"/direct
 
   const params = await searchParams;
   const filters = parseFilters(params);
-  const { departments, failed: departmentsFailed } = await getDepartments(supabase);
   const filterKey = `${filters.query}|${filters.department}`;
 
   return (
@@ -45,12 +44,7 @@ export default async function DirectoryPage({ searchParams }: PageProps<"/direct
         Search by name, filter by department, and open a card to see the full profile.
       </p>
 
-      <FilterForm
-        key={`form-${filterKey}`}
-        filters={filters}
-        departments={departments}
-        departmentsFailed={departmentsFailed}
-      />
+      <FilterForm key={`form-${filterKey}`} filters={filters} />
 
       <Suspense key={`results-${filterKey}`} fallback={<ResultsSkeleton />}>
         <Results supabase={supabase} filters={filters} userId={user.id} />

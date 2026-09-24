@@ -33,7 +33,7 @@ function profileForm(overrides: Record<string, string> = {}) {
   const formData = new FormData();
   const fields = {
     fullName: "Ada Lovelace",
-    department: "Applied Research",
+    department: "Analysis",
     jobTitle: "Analyst",
     location: "London",
     bio: "Works on analytical engines.",

@@ -1,4 +1,5 @@
 import type { ServerClient } from "@/lib/supabase/server";
+import { isDepartment } from "./fields";
 
 const MAX_QUERY_LENGTH = 100;
 const BIO_PREVIEW_LENGTH = 160;
@@ -33,9 +34,10 @@ function first(value: string | string[] | undefined) {
 }
 
 export function parseFilters(params: Record<string, string | string[] | undefined>): Filters {
+  const department = first(params.department).trim();
   return {
     query: first(params.q).trim().slice(0, MAX_QUERY_LENGTH),
-    department: first(params.department).trim(),
+    department: isDepartment(department) ? department : "",
   };
 }
 
@@ -71,22 +73,6 @@ export async function hasProfile(supabase: ServerClient, userId: string) {
     throw new Error("Couldn't check your profile.");
   }
   return Boolean(data);
-}
-
-export async function getDepartments(supabase: ServerClient) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("department")
-    .not("department", "is", null)
-    .overrideTypes<{ department: string }[], { merge: false }>();
-
-  if (error) {
-    return { departments: [], failed: true };
-  }
-
-  const departments = Array.from(new Set(data.map((row) => row.department.trim()).filter(Boolean)));
-  departments.sort((a, b) => a.localeCompare(b));
-  return { departments, failed: false };
 }
 
 export async function getProfiles(supabase: ServerClient, { query, department }: Filters) {

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useActionState, useRef } from "react";
-import { Field, TextArea } from "@/components/field";
+import { Field, Select, TextArea } from "@/components/field";
 import { StatusMessage } from "@/components/status-message";
 import { primaryButton, secondaryButton, textLink } from "@/components/styles";
 import { useFocusResult } from "@/components/use-focus-result";
-import { LIMITS, type ProfileValues } from "@/lib/profiles/fields";
+import { DEPARTMENTS, LIMITS, type ProfileValues } from "@/lib/profiles/fields";
 import { saveProfile } from "./actions";
 import { initialState } from "./form-state";
 
@@ -64,13 +64,11 @@ export function ProfileForm({ saved, isNew, profileHref }: ProfileFormProps) {
           defaultValue={values.jobTitle}
           error={errors.jobTitle}
         />
-        <Field
+        <Select
           name="department"
           label="Department"
-          type="text"
-          autoComplete="off"
-          maxLength={LIMITS.department}
-          hint="For example, Applied Research."
+          options={DEPARTMENTS}
+          placeholder="Choose a department"
           defaultValue={values.department}
           error={errors.department}
         />

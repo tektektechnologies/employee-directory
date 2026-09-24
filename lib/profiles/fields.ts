@@ -4,7 +4,6 @@ import { toContactLink, toHttpsUrl } from "./links";
 // field message instead of a database error.
 export const LIMITS = {
   fullName: 100,
-  department: 100,
   jobTitle: 100,
   location: 100,
   bio: 1000,
@@ -12,6 +11,23 @@ export const LIMITS = {
   interestLength: 40,
   url: 2048,
 } as const;
+
+export const DEPARTMENTS = [
+  "Arithmetic",
+  "Algebra",
+  "Geometry",
+  "Number Theory",
+  "Analysis",
+  "Topology",
+  "Logic and Foundations of Mathematics",
+  "Combinatorics",
+  "Probability",
+  "Statistics",
+];
+
+export function isDepartment(name: string) {
+  return DEPARTMENTS.includes(name);
+}
 
 export type ProfileValues = {
   fullName: string;
@@ -99,7 +115,6 @@ export function validateProfile(formData: FormData) {
   const required: [ProfileField, string, number][] = [
     ["fullName", "Enter your name.", LIMITS.fullName],
     ["jobTitle", "Enter your role.", LIMITS.jobTitle],
-    ["department", "Enter your department.", LIMITS.department],
     ["location", "Enter your location.", LIMITS.location],
     ["bio", "Write a short bio.", LIMITS.bio],
   ];
@@ -109,6 +124,10 @@ export function validateProfile(formData: FormData) {
     } else if (values[name].length > max) {
       errors[name] = `Use ${max} characters or fewer (currently ${values[name].length}).`;
     }
+  }
+
+  if (!isDepartment(values.department)) {
+    errors.department = "Choose your department from the list.";
   }
 
   const interests = splitInterests(values.interests);

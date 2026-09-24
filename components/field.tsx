@@ -22,6 +22,11 @@ type TextAreaProps = BaseProps & {
   rows?: number;
 };
 
+type SelectProps = Omit<BaseProps, "maxLength"> & {
+  options: readonly string[];
+  placeholder: string;
+};
+
 function ids(name: string, hint?: string, error?: string) {
   const id = `field-${name}`;
   const hintId = hint ? `${id}-hint` : undefined;
@@ -119,6 +124,47 @@ export function TextArea({
         aria-describedby={describedBy}
         className={`${inputClass} resize-y`}
       />
+      <Messages hint={hint} hintId={hintId} error={error} errorId={errorId} />
+    </div>
+  );
+}
+
+export function Select({
+  name,
+  label,
+  options,
+  placeholder,
+  defaultValue = "",
+  error,
+  hint,
+  required = true,
+}: SelectProps) {
+  const { id, hintId, errorId, describedBy } = ids(name, hint, error);
+  // A saved value that is no longer an option falls back to the placeholder,
+  // so the user is asked to choose again.
+  const selected = options.includes(defaultValue) ? defaultValue : "";
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} label={label} required={required} />
+      <select
+        id={id}
+        name={name}
+        defaultValue={selected}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={inputClass}
+      >
+        <option value="" disabled={required}>
+          {placeholder}
+        </option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
       <Messages hint={hint} hintId={hintId} error={error} errorId={errorId} />
     </div>
   );

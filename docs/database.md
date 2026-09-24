@@ -12,7 +12,7 @@ Created by `supabase/migrations/20260924131500_create_profiles.sql`.
 | ------------- | ------------- | -------------------------------------------------------- |
 | `id`          | `uuid`        | Primary key; references `auth.users(id)`, cascade delete |
 | `full_name`   | `text`        | Required, 1–100 characters (ignoring surrounding spaces) |
-| `department`  | `text`        | Optional, up to 100 characters                           |
+| `department`  | `text`        | Optional, up to 100 characters. The app only saves one of the fixed departments in `lib/profiles/fields.ts` |
 | `job_title`   | `text`        | Optional, up to 100 characters (the employee's role)     |
 | `bio`         | `text`        | Optional, up to 1000 characters                          |
 | `location`    | `text`        | Optional, up to 100 characters                           |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDepartments, getProfiles, parseFilters, type Filters } from "@/lib/profiles/directory";
+import { getProfiles, parseFilters, type Filters } from "@/lib/profiles/directory";
 import { fakeSupabase, findCall } from "./support/fake-supabase";
 
 const noFilters: Filters = { query: "", department: "" };
@@ -7,17 +7,21 @@ const noFilters: Filters = { query: "", department: "" };
 describe("parseFilters", () => {
   it("trims values and defaults to no filters", () => {
     expect(parseFilters({})).toEqual(noFilters);
-    expect(parseFilters({ q: "  ada ", department: " Research " })).toEqual({
+    expect(parseFilters({ q: "  ada ", department: " Algebra " })).toEqual({
       query: "ada",
-      department: "Research",
+      department: "Algebra",
     });
   });
 
   it("uses the first value when a parameter is repeated", () => {
-    expect(parseFilters({ q: ["ada", "alan"], department: ["Research", "Ops"] })).toEqual({
+    expect(parseFilters({ q: ["ada", "alan"], department: ["Algebra", "Topology"] })).toEqual({
       query: "ada",
-      department: "Research",
+      department: "Algebra",
     });
+  });
+
+  it("ignores a department that isn't in the list", () => {
+    expect(parseFilters({ department: "Research" }).department).toBe("");
   });
 
   it("caps the name query length", () => {
@@ -30,7 +34,7 @@ describe("getProfiles", () => {
     id: "11111111-1111-4111-8111-111111111111",
     full_name: "Ada Lovelace",
     job_title: "Analyst",
-    department: "Research",
+    department: "Algebra",
     location: "London",
     bio: "word ".repeat(60),
   };
@@ -48,10 +52,10 @@ describe("getProfiles", () => {
   });
 
   it("combines name search and department with AND semantics", async () => {
-    const { query } = await search({ query: "ada", department: "Research" });
+    const { query } = await search({ query: "ada", department: "Algebra" });
 
     expect(findCall(query, "ilike")?.args).toEqual(["full_name", "%ada%"]);
-    expect(findCall(query, "eq")?.args).toEqual(["department", "Research"]);
+    expect(findCall(query, "eq")?.args).toEqual(["department", "Algebra"]);
     expect(findCall(query, "or")).toBeUndefined();
     expect(findCall(query, "order")?.args[0]).toBe("full_name");
   });
@@ -70,7 +74,7 @@ describe("getProfiles", () => {
     const { result } = await search(noFilters);
 
     expect(result.failed).toBe(false);
-    expect(result.profiles?.[0]).toMatchObject({ fullName: "Ada Lovelace", department: "Research" });
+    expect(result.profiles?.[0]).toMatchObject({ fullName: "Ada Lovelace", department: "Algebra" });
     expect(result.profiles?.[0].bio?.length).toBeLessThanOrEqual(161);
     expect(result.profiles?.[0].bio?.endsWith("…")).toBe(true);
   });
@@ -81,24 +85,5 @@ describe("getProfiles", () => {
 
     expect(await getProfiles(failing.client, noFilters)).toEqual({ profiles: null, failed: true });
     expect(await getProfiles(empty.client, noFilters)).toEqual({ profiles: [], failed: false });
-  });
-});
-
-describe("getDepartments", () => {
-  it("returns unique, trimmed, alphabetized department names", async () => {
-    const fake = fakeSupabase(() => ({
-      data: [
-        { department: "Research" },
-        { department: " Operations " },
-        { department: "Research" },
-        { department: "" },
-      ],
-      error: null,
-    }));
-
-    expect(await getDepartments(fake.client)).toEqual({
-      departments: ["Operations", "Research"],
-      failed: false,
-    });
   });
 });
